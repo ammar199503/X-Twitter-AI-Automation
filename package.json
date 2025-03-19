@@ -1,0 +1,24 @@
+{
+  "name": "twitter-scraper-and-poster",
+  "version": "1.0.0",
+  "description": "A tool for automatically capturing and reposting tweets with screenshots",
+  "scripts": {
+    "backend": "cd backend && npm run start",
+    "frontend": "cd frontend && npm start",
+    "dev": "concurrently \"npm run backend\" \"npm run frontend\""
+  },
+  "keywords": [
+    "twitter",
+    "screenshot",
+    "automation",
+    "tweet-capture"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}

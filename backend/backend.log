@@ -1,0 +1,9 @@
+Twitter Scraper Backend - Started at 2025-03-19T15:50:43.434Z
+
+[2025-03-19T15:50:43.814Z] [INFO] Ensured screenshots directory exists at: /Users/ammarmalik/Desktop/D/Twitter-Scrape-and-Post/screenshots
+[2025-03-19T15:50:43.815Z] [INFO] Twitter scraper backend running on port 3002
+[2025-03-19T15:50:46.502Z] [INFO] [0mGET /health [32m200[0m 1.761 ms - 15[0m
+[2025-03-19T15:50:52.371Z] [INFO] [0mGET /apple-touch-icon-precomposed.png [33m404[0m 1.048 ms - 171[0m
+[2025-03-19T15:50:52.372Z] [INFO] [0mGET /apple-touch-icon.png [33m404[0m 0.297 ms - 159[0m
+[2025-03-19T15:50:52.374Z] [INFO] [0mGET /favicon.ico [33m404[0m 0.404 ms - 150[0m
+[2025-03-19T15:50:57.639Z] [INFO] [0mGET / [33m404[0m 0.236 ms - 139[0m
