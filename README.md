@@ -100,23 +100,77 @@ Follow these steps carefully:
 2. **Clone this repository:**
    - Copy and paste this command into your terminal and press Enter:
    ```bash
-   git clone https://github.com/ammar199503/Twitter-AI-Automation.git
+   git clone https://github.com/ammar199503/X-Twitter-AI-Automation.git
    ```
    - This will download all the project files to your computer
 
 3. **Navigate to the project folder:**
    - Type this command and press Enter:
    ```bash
-   cd Twitter-AI-Automation
+   cd X-Twitter-AI-Automation
    ```
 
 4. **Install dependencies:**
-   - Type this command and press Enter:
+   - Run the setup script which will install all dependencies in one go:
    ```bash
-   npm install
+   npm run setup
    ```
-   - This might take a few minutes as it downloads all necessary components
-   - You should see a progress bar and eventually a completion message
+   - This will install dependencies for the main project, backend, and frontend
+   - The process might take a few minutes to complete
+
+## Troubleshooting Installation
+
+If you encounter any errors during the installation process, try these steps:
+
+1. **Missing modules error:**
+   - For errors like `Cannot find module 'dotenv'` or `react-scripts: command not found`, try this complete reset:
+   ```bash
+   # Remove node_modules and package-lock.json files
+   rm -rf node_modules package-lock.json
+   rm -rf backend/node_modules backend/package-lock.json
+   rm -rf frontend/node_modules frontend/package-lock.json
+   
+   # Clean npm cache
+   npm cache clean --force
+   
+   # Reinstall all dependencies
+   npm install
+   cd backend && npm install
+   cd ../frontend && npm install
+   cd ..
+   ```
+
+2. **Specific error: `Cannot find package 'dotenv'`:**
+   - This is typically caused by module resolution issues with ESM imports
+   - Make sure the backend's package.json has `"type": "module"` and install dotenv specifically:
+   ```bash
+   cd backend
+   npm install dotenv@16.3.1
+   cd ..
+   ```
+
+3. **Specific error: `react-scripts: command not found`:**
+   - This indicates that the React development dependencies are missing
+   - Install them specifically:
+   ```bash
+   cd frontend
+   npm install react-scripts
+   cd ..
+   ```
+
+4. **Node version issues:**
+   - Verify your Node.js version (this project requires Node.js 18 or higher):
+   ```bash
+   node -v
+   ```
+   - If your Node version is below 18, update it
+
+5. **Permission errors:**
+   - On macOS/Linux you might need to use sudo:
+   ```bash
+   sudo npm install
+   ```
+   - On Windows, try running Command Prompt as administrator
 
 ## Usage
 

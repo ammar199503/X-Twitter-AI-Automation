@@ -1,15 +1,19 @@
 {
-  "name": "twitter-scraper-and-poster",
+  "name": "twitter-ai-automation",
   "version": "1.0.0",
-  "description": "A tool for automatically capturing and reposting tweets with screenshots",
+  "description": "Twitter AI Automation tool for scraping tweets and posting AI-generated content",
   "scripts": {
     "backend": "cd backend && npm run start",
     "frontend": "cd frontend && npm start",
-    "dev": "concurrently \"npm run backend\" \"npm run frontend\""
+    "dev": "concurrently \"npm run backend\" \"npm run frontend\"",
+    "postinstall": "cd backend && npm install && cd ../frontend && npm install",
+    "setup": "npm install && npm run postinstall"
   },
   "keywords": [
     "twitter",
-    "screenshot",
+    "x",
+    "ai",
+    "openai",
     "automation",
     "tweet-capture"
   ],
