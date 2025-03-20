@@ -20,6 +20,7 @@ import {
 import TwitterIcon from '@mui/icons-material/Twitter';
 import ApiService from '../services/api';
 import { Visibility, VisibilityOff } from '@mui/icons-material';
+import InfoIcon from '@mui/icons-material/Info';
 
 const LoginPage = () => {
   const navigate = useNavigate();
@@ -390,12 +391,22 @@ const LoginPage = () => {
                         color: 'rgba(0, 0, 0, 0.3)',
                         '&.Mui-checked': {
                           color: 'primary.main'
-                        }
+                        },
+                        padding: '4px'
                       }}
                     />
                   }
                   label={
-                    <Typography variant="body2" sx={{ color: 'text.secondary', fontSize: '0.9rem' }}>
+                    <Typography 
+                      variant="body2" 
+                      sx={{ 
+                        color: 'text.secondary', 
+                        fontSize: '0.9rem',
+                        lineHeight: 1.5,
+                        display: 'inline-flex',
+                        alignItems: 'center'
+                      }}
+                    >
                       I agree to the{' '}
                       <Link 
                         href="/terms" 
@@ -433,21 +444,23 @@ const LoginPage = () => {
                   sx={{ 
                     mt: 1,
                     mb: 2,
-                    alignItems: 'flex-start'
+                    alignItems: 'center',
+                    marginLeft: '-5px'
                   }}
                 />
                 
                 <Alert 
-                  severity="info" 
+                  severity="success" 
                   sx={{ 
                     mb: 3,
                     borderRadius: 2,
-                    backgroundColor: 'rgba(0, 113, 227, 0.08)',
-                    border: '1px solid rgba(0, 113, 227, 0.12)'
+                    backgroundColor: 'rgba(46, 125, 50, 0.08)',
+                    border: '1px solid rgba(46, 125, 50, 0.12)'
                   }}
+                  icon={<InfoIcon style={{ color: '#2e7d32' }} />}
                 >
-                  <AlertTitle sx={{ fontWeight: 600 }}>Security Notice</AlertTitle>
-                  Your credentials are used only for authentication with X/Twitter API and are not stored permanently.
+                  <AlertTitle sx={{ fontWeight: 600, color: '#2e7d32' }}>Security Notice</AlertTitle>
+                  Your credentials are used only for authentication with X/Twitter on your local computer and are not stored or sent to any developer or server.
                 </Alert>
                 
                 <Button
@@ -777,12 +790,22 @@ const LoginPage = () => {
                       color: 'rgba(0, 0, 0, 0.3)',
                       '&.Mui-checked': {
                         color: 'primary.main'
-                      }
+                      },
+                      padding: '4px'
                     }}
                   />
                 }
                 label={
-                  <Typography variant="body2" sx={{ color: 'text.secondary', fontSize: '0.9rem' }}>
+                  <Typography 
+                    variant="body2" 
+                    sx={{ 
+                      color: 'text.secondary', 
+                      fontSize: '0.9rem',
+                      lineHeight: 1.5,
+                      display: 'inline-flex',
+                      alignItems: 'center'
+                    }}
+                  >
                     I agree to the{' '}
                     <Link 
                       href="/terms" 
@@ -820,21 +843,23 @@ const LoginPage = () => {
                 sx={{ 
                   mt: 1,
                   mb: 2,
-                  alignItems: 'flex-start'
+                  alignItems: 'center',
+                  marginLeft: '-5px'
                 }}
               />
               
               <Alert 
-                severity="info" 
+                severity="success" 
                 sx={{ 
                   mb: 3,
                   borderRadius: 2,
-                  backgroundColor: 'rgba(0, 113, 227, 0.08)',
-                  border: '1px solid rgba(0, 113, 227, 0.12)'
+                  backgroundColor: 'rgba(46, 125, 50, 0.08)',
+                  border: '1px solid rgba(46, 125, 50, 0.12)'
                 }}
+                icon={<InfoIcon style={{ color: '#2e7d32' }} />}
               >
-                <AlertTitle sx={{ fontWeight: 600 }}>Security Notice</AlertTitle>
-                Your credentials are used only for authentication with X/Twitter API and are not stored permanently.
+                <AlertTitle sx={{ fontWeight: 600, color: '#2e7d32' }}>Security Notice</AlertTitle>
+                Your credentials are used only for authentication with X/Twitter on your local computer and are not stored or sent to any developer or server.
               </Alert>
               
               <Button

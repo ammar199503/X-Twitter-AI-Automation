@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import {
   Box,
   Button,
@@ -52,6 +52,7 @@ import {
   DeleteSweep as DeleteSweepIcon,
   Logout as LogoutIcon,
   Login as LoginIcon,
+  CloudSync as CloudSyncIcon,
 } from '@mui/icons-material';
 import ApiService from '../services/api';
 
@@ -77,6 +78,9 @@ const Dashboard = () => {
   const [openClearWarningDialog, setOpenClearWarningDialog] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
+  // State for confirm scraping dialog
+  const [confirmScrapingOpen, setConfirmScrapingOpen] = useState(false);
+
   useEffect(() => {
     // Only set up status polling if auth check passes
     const initDashboard = async () => {
@@ -85,6 +89,7 @@ const Dashboard = () => {
         // Initial fetch
         fetchStatus();
         fetchLogs();
+        fetchProcessedLinks(); // Fetch processed links on initial load
         
         // Poll for status updates
         const intervalId = setInterval(fetchStatus, 10000);
@@ -148,8 +153,28 @@ const Dashboard = () => {
             maxDelay: data.status.delays.maxDelay || data.status.delays.max
           };
         }
-        console.log('Normalized status data:', data.status);
-        setStatus(data.status);
+        
+        // Check if OpenAI is configured
+        const checkOpenAIStatus = async () => {
+          try {
+            const response = await ApiService.config.getOpenAIConfig();
+            return {
+              ...data.status,
+              openAIConfigured: !!(response.data?.openai?.apiKey)
+            };
+          } catch (error) {
+            console.error('Error checking OpenAI status:', error);
+            return {
+              ...data.status,
+              openAIConfigured: false
+            };
+          }
+        };
+        
+        // Get enhanced status with OpenAI config check
+        const enhancedStatus = await checkOpenAIStatus();
+        console.log('Enhanced status data:', enhancedStatus);
+        setStatus(enhancedStatus);
       } else {
         setError('Failed to load status');
       }
@@ -178,8 +203,37 @@ const Dashboard = () => {
     }
   };
 
+  // Function to verify required settings before scraping
+  const verifyScrapingRequirements = () => {
+    const validationErrors = [];
+    
+    // Verify target accounts
+    if (!status?.targetAccounts || status.targetAccounts.length === 0) {
+      validationErrors.push('No target accounts configured. Please add at least one account to monitor.');
+    }
+    
+    // Verify OpenAI API key is set
+    if (!status?.openAIConfigured) {
+      validationErrors.push('OpenAI API key is not configured. Please add your API key in OpenAI Settings.');
+    }
+    
+    return {
+      isValid: validationErrors.length === 0,
+      errors: validationErrors
+    };
+  };
+
   const handleStartScraping = async () => {
     try {
+      // First verify requirements
+      const { isValid, errors } = verifyScrapingRequirements();
+      
+      if (!isValid) {
+        setError(errors.join(' '));
+        setConfirmScrapingOpen(false);
+        return;
+      }
+      
       setIsStarting(true);
       setError(''); // Clear any previous errors
       const { data } = await ApiService.scraper.start();
@@ -569,22 +623,45 @@ const Dashboard = () => {
                     
                     <Box sx={{ display: 'flex', alignItems: 'center' }}>
                       <Typography variant="body1" component="span" sx={{ mr: 1, color: 'text.secondary' }}>
-                        Twitter API:
+                        Processed Tweets:
                       </Typography>
-                      <Typography 
-                        variant="body1" 
-                        component="span" 
+                      <Button 
+                        onClick={handleOpenLinksDialog}
                         sx={{ 
                           fontWeight: 600,
                           py: 0.5, 
                           px: 1.5, 
                           borderRadius: 3,
-                          backgroundColor: status?.isTwitterConnected ? 'rgba(52, 199, 89, 0.12)' : 'rgba(255, 59, 48, 0.08)',
-                          color: status?.isTwitterConnected ? 'success.main' : 'error.main'
+                          backgroundColor: 'rgba(0, 113, 227, 0.08)',
+                          color: 'primary.main',
+                          minWidth: 'auto',
+                          '&:hover': {
+                            backgroundColor: 'rgba(0, 113, 227, 0.15)',
+                          }
                         }}
+                        disabled={isLoadingLinks}
                       >
-                        {status?.isTwitterConnected ? 'Connected' : 'Disconnected'}
-                      </Typography>
+                        {processedLinks.length || 0}
+                      </Button>
+                      <IconButton 
+                        size="small" 
+                        onClick={fetchProcessedLinks}
+                        disabled={isLoadingLinks}
+                        sx={{ ml: 1 }}
+                      >
+                        {isLoadingLinks ? <CircularProgress size={16} /> : <RefreshIcon fontSize="small" />}
+                      </IconButton>
+                      <Tooltip title="Delete processed tweets history">
+                        <IconButton
+                          color="error"
+                          size="small"
+                          onClick={handleOpenClearWarningDialog}
+                          disabled={isLoadingLinks || processedLinks.length === 0}
+                          sx={{ ml: 1 }}
+                        >
+                          <DeleteSweepIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
                     </Box>
                   </Stack>
                 </Grid>
@@ -617,7 +694,7 @@ const Dashboard = () => {
                         variant="contained"
                         color="success"
                         startIcon={isStarting ? <CircularProgress size={20} /> : <PlayIcon />}
-                        onClick={handleStartScraping}
+                        onClick={() => setConfirmScrapingOpen(true)}
                         disabled={isStarting || !status?.isLoggedIn}
                         sx={{ py: 1.5 }}
                       >
@@ -639,9 +716,9 @@ const Dashboard = () => {
             <CardContent>
               <List>
                 <ListItem 
-                  button 
                   onClick={() => navigate('/target-accounts')}
                   disabled={!status?.isLoggedIn}
+                  sx={{ cursor: 'pointer' }}
                 >
                   <ListItemIcon>
                     <AccountIcon color={status?.isLoggedIn ? 'inherit' : 'disabled'} />
@@ -658,9 +735,9 @@ const Dashboard = () => {
                   />
                 </ListItem>
                 <ListItem 
-                  button 
                   onClick={() => navigate('/config')}
                   disabled={!status?.isLoggedIn}
+                  sx={{ cursor: 'pointer', '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.04)' } }}
                 >
                   <ListItemIcon>
                     <TimerIcon color={status?.isLoggedIn ? 'inherit' : 'disabled'} />
@@ -683,16 +760,16 @@ const Dashboard = () => {
                   />
                 </ListItem>
                 <ListItem 
-                  button 
-                  onClick={() => navigate('/config')}
+                  onClick={() => navigate('/openai-config')}
                   disabled={!status?.isLoggedIn}
+                  sx={{ cursor: 'pointer' }}
                 >
                   <ListItemIcon>
-                    <SettingsIcon color={status?.isLoggedIn ? 'inherit' : 'disabled'} />
+                    <CloudSyncIcon color={status?.isLoggedIn ? 'inherit' : 'disabled'} />
                   </ListItemIcon>
                   <ListItemText 
-                    primary="Tweet Text" 
-                    secondary={status?.tweetText || 'No custom text'} 
+                    primary="OpenAI Settings" 
+                    secondary="Configure tweet rephrasing personality"
                     primaryTypographyProps={{
                       color: !status?.isLoggedIn ? 'text.disabled' : 'inherit'
                     }}
@@ -1014,7 +1091,7 @@ const Dashboard = () => {
         </DialogTitle>
         <DialogContent>
           <DialogContentText sx={{ color: 'text.primary' }}>
-            All previously scraped tweets data will be cleared which can cause to post the already posted tweets again. 
+            Removing all history may cause duplicate tweets posted to your account.
             Are you sure you want to continue?
           </DialogContentText>
         </DialogContent>
@@ -1045,7 +1122,170 @@ const Dashboard = () => {
               }
             }}
           >
-            Clear History
+            Delete History
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Start Scraping Confirmation Dialog */}
+      <Dialog
+        open={confirmScrapingOpen}
+        onClose={() => setConfirmScrapingOpen(false)}
+        PaperProps={{
+          sx: {
+            borderRadius: 4,
+            boxShadow: '0 10px 40px rgba(0, 0, 0, 0.1)',
+            p: 1,
+            maxWidth: 500
+          }
+        }}
+      >
+        <DialogTitle sx={{ 
+          fontWeight: 600,
+          pb: 1,
+          borderBottom: '1px solid',
+          borderColor: 'divider',
+          backgroundColor: 'rgba(0, 0, 0, 0.02)'
+        }}>
+          Confirm Scraping Settings
+        </DialogTitle>
+        <DialogContent sx={{ pt: 2, pb: 1 }}>
+          <Typography variant="subtitle1" fontWeight={600} mb={2}>
+            Please review your scraping settings:
+          </Typography>
+          
+          <Box sx={{ 
+            backgroundColor: 'rgba(0, 0, 0, 0.02)', 
+            p: 2, 
+            borderRadius: 2,
+            mb: 2,
+          }}>
+            <Grid container spacing={2}>
+              <Grid item xs={6}>
+                <Typography variant="body2" color="text.secondary">
+                  Account:
+                </Typography>
+              </Grid>
+              <Grid item xs={6}>
+                <Typography variant="body2" fontWeight={500}>
+                  {status?.username || 'Unknown'}
+                </Typography>
+              </Grid>
+              
+              <Grid item xs={6}>
+                <Typography variant="body2" color="text.secondary">
+                  Tweets per account:
+                </Typography>
+              </Grid>
+              <Grid item xs={6}>
+                <Typography variant="body2" fontWeight={500}>
+                  {status?.tweetsPerAccount || 'Default'}
+                </Typography>
+              </Grid>
+              
+              <Grid item xs={6}>
+                <Typography variant="body2" color="text.secondary">
+                  Delay between tweets:
+                </Typography>
+              </Grid>
+              <Grid item xs={6}>
+                <Typography variant="body2" fontWeight={500}>
+                  {status?.delays ? `${(status.delays.min / 1000).toFixed(1)} - ${(status.delays.max / 1000).toFixed(1)} seconds` : 'Default'}
+                </Typography>
+              </Grid>
+              
+              <Grid item xs={6}>
+                <Typography variant="body2" color="text.secondary">
+                  Target accounts:
+                </Typography>
+              </Grid>
+              <Grid item xs={6}>
+                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                  <Typography 
+                    variant="body2" 
+                    fontWeight={500}
+                    color={(!status?.targetAccounts || status?.targetAccounts?.length === 0) ? 'error.main' : 'inherit'}
+                  >
+                    {status?.targetAccounts?.length || 0} accounts
+                  </Typography>
+                  {(!status?.targetAccounts || status?.targetAccounts?.length === 0) && (
+                    <Tooltip title="At least one target account is required">
+                      <WarningIcon fontSize="small" color="error" sx={{ ml: 1 }} />
+                    </Tooltip>
+                  )}
+                </Box>
+              </Grid>
+              
+              <Grid item xs={6}>
+                <Typography variant="body2" color="text.secondary">
+                  OpenAI API Key:
+                </Typography>
+              </Grid>
+              <Grid item xs={6}>
+                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                  <Typography 
+                    variant="body2" 
+                    fontWeight={500}
+                    color={!status?.openAIConfigured ? 'error.main' : 'success.main'}
+                  >
+                    {status?.openAIConfigured ? 'Configured' : 'Not configured'}
+                  </Typography>
+                  {!status?.openAIConfigured && (
+                    <Tooltip title="OpenAI API key is required for tweet processing">
+                      <WarningIcon fontSize="small" color="error" sx={{ ml: 1 }} />
+                    </Tooltip>
+                  )}
+                </Box>
+              </Grid>
+            </Grid>
+          </Box>
+          
+          <Typography variant="body2" color="text.secondary">
+            Click "Start Scraping" to begin with these settings or "Cancel" to adjust your settings.
+          </Typography>
+          
+          {(!status?.targetAccounts || status?.targetAccounts?.length === 0 || !status?.openAIConfigured) && (
+            <Alert severity="warning" sx={{ mt: 2 }}>
+              {!status?.targetAccounts || status?.targetAccounts?.length === 0 ? 
+                "Please add target accounts before starting scraping. " : ""}
+              {!status?.openAIConfigured ? 
+                "Please configure your OpenAI API key before starting scraping." : ""}
+            </Alert>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 3 }}>
+          <Button 
+            onClick={() => setConfirmScrapingOpen(false)}
+            variant="outlined"
+            sx={{ 
+              borderRadius: 2,
+              transition: 'all 0.2s ease',
+              '&:hover': {
+                backgroundColor: 'rgba(0, 0, 0, 0.03)'
+              }
+            }}
+          >
+            Cancel
+          </Button>
+          <Button 
+            onClick={() => {
+              setConfirmScrapingOpen(false);
+              handleStartScraping();
+            }}
+            color="success"
+            variant="contained"
+            startIcon={<PlayIcon />}
+            disabled={!status?.targetAccounts || status?.targetAccounts?.length === 0 || !status?.openAIConfigured}
+            sx={{ 
+              borderRadius: 2,
+              boxShadow: '0 2px 8px rgba(52, 199, 89, 0.2)',
+              ml: 1,
+              '&:hover': {
+                boxShadow: '0 4px 12px rgba(52, 199, 89, 0.3)'
+              }
+            }}
+          >
+            Start Scraping
           </Button>
         </DialogActions>
       </Dialog>

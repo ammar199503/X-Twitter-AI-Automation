@@ -77,8 +77,9 @@ const ApiService = {
     },
     clearProcessedLinks: async () => {
       try {
-        const response = await API.post('/scraper/clear-processed-links');
-        return response.data;
+        // Use the correct endpoint from scrapings.js route
+        const response = await API.post('/scrape/clear-processed');
+        return response;
       } catch (error) {
         console.error('Error clearing processed links:', error);
         throw error;
@@ -159,6 +160,32 @@ const ApiService = {
         return await API.put('/config/tweets-per-account', { count });
       } catch (error) {
         console.error('Error updating tweets per account:', error);
+        throw error;
+      }
+    },
+    /**
+     * Get OpenAI configuration
+     * @returns {Promise<Object>} OpenAI configuration
+     */
+    getOpenAIConfig: async () => {
+      try {
+        return await API.get('/config/openai');
+      } catch (error) {
+        console.error('Error getting OpenAI config:', error);
+        throw error;
+      }
+    },
+    
+    /**
+     * Update OpenAI configuration
+     * @param {Object} config - OpenAI configuration options
+     * @returns {Promise<Object>} Updated OpenAI configuration
+     */
+    updateOpenAIConfig: async (config) => {
+      try {
+        return await API.put('/config/openai', config);
+      } catch (error) {
+        console.error('Error updating OpenAI config:', error);
         throw error;
       }
     }

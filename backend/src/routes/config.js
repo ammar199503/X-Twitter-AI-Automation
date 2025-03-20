@@ -1,5 +1,6 @@
 import express from 'express';
 import * as configService from '../services/configService.js';
+import * as openaiService from '../services/openaiService.js';
 
 const router = express.Router();
 
@@ -43,48 +44,185 @@ router.put('/target-accounts', (req, res) => {
   try {
     const { accounts } = req.body;
     
-    if (!Array.isArray(accounts)) {
+    if (!accounts || !Array.isArray(accounts)) {
       return res.status(400).json({
         success: false,
-        error: 'Accounts must be an array'
+        error: 'Invalid target accounts data'
       });
     }
     
-    configService.updateTargetAccounts(accounts);
+    const updatedConfig = configService.updateTargetAccounts(accounts);
     
     res.json({
       success: true,
-      message: 'Target accounts updated',
-      accounts: configService.getConfig().targetAccounts
+      targetAccounts: updatedConfig.targetAccounts
     });
   } catch (error) {
     console.error('Error updating target accounts:', error);
     res.status(500).json({
       success: false,
-      error: error.message || 'Failed to update target accounts'
+      error: error.message || 'Error updating target accounts'
+    });
+  }
+});
+
+/**
+ * @route GET /api/config/target-accounts
+ * @desc Get target accounts
+ * @access Public
+ */
+router.get('/target-accounts', (req, res) => {
+  try {
+    const config = configService.getConfig();
+    res.json({
+      success: true,
+      targetAccounts: config.targetAccounts || []
+    });
+  } catch (error) {
+    console.error('Error getting target accounts:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Error getting target accounts'
+    });
+  }
+});
+
+/**
+ * @route POST /api/config/target-accounts
+ * @desc Add a target account
+ * @access Public
+ */
+router.post('/target-accounts', (req, res) => {
+  try {
+    const { account, pinnedTweetId } = req.body;
+    
+    if (!account) {
+      return res.status(400).json({
+        success: false,
+        error: 'Account name is required'
+      });
+    }
+    
+    // Get current config
+    const config = configService.getConfig();
+    
+    // Check if account already exists
+    const existingAccount = config.targetAccounts.find(a => {
+      if (typeof a === 'string') {
+        return a === account;
+      }
+      return a.account === account;
+    });
+    
+    if (existingAccount) {
+      return res.status(400).json({
+        success: false,
+        error: 'Account already exists in target accounts'
+      });
+    }
+    
+    // Add new account with optional pinned tweet ID
+    let accountToAdd = account;
+    if (pinnedTweetId) {
+      accountToAdd = { account, pinnedTweetId };
+    }
+    
+    // Update config with new account
+    const newAccounts = [...config.targetAccounts, accountToAdd];
+    const updatedConfig = configService.updateTargetAccounts(newAccounts);
+    
+    res.json({
+      success: true,
+      targetAccounts: updatedConfig.targetAccounts
+    });
+  } catch (error) {
+    console.error('Error adding target account:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Error adding target account'
+    });
+  }
+});
+
+/**
+ * @route DELETE /api/config/target-accounts/:account
+ * @desc Delete a target account
+ * @access Public
+ */
+router.delete('/target-accounts/:account', (req, res) => {
+  try {
+    const accountToDelete = req.params.account;
+    
+    // Get current config
+    const config = configService.getConfig();
+    
+    // Filter out the account to delete
+    const updatedAccounts = config.targetAccounts.filter(a => {
+      if (typeof a === 'string') {
+        return a !== accountToDelete;
+      }
+      return a.account !== accountToDelete;
+    });
+    
+    // Update config with filtered accounts
+    const updatedConfig = configService.updateTargetAccounts(updatedAccounts);
+    
+    res.json({
+      success: true,
+      targetAccounts: updatedConfig.targetAccounts
+    });
+  } catch (error) {
+    console.error('Error deleting target account:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Error deleting target account'
+    });
+  }
+});
+
+/**
+ * @route DELETE /api/config/target-accounts
+ * @desc Delete all target accounts
+ * @access Public
+ */
+router.delete('/target-accounts', (req, res) => {
+  try {
+    // Update config with empty accounts array
+    const updatedConfig = configService.updateTargetAccounts([]);
+    
+    res.json({
+      success: true,
+      targetAccounts: updatedConfig.targetAccounts
+    });
+  } catch (error) {
+    console.error('Error deleting all target accounts:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Error deleting all target accounts'
     });
   }
 });
 
 /**
  * @route PUT /api/config/pinned-tweets
- * @desc Update pinned tweet IDs
+ * @desc Update pinned tweets
  * @access Public
  */
 router.put('/pinned-tweets', (req, res) => {
   try {
     const { pinnedTweets } = req.body;
     
-    if (typeof pinnedTweets !== 'object') {
+    if (!pinnedTweets || typeof pinnedTweets !== 'object') {
       return res.status(400).json({
         success: false,
-        error: 'Pinned tweets must be an object'
+        error: 'Invalid pinned tweets data'
       });
     }
     
     // Clear existing pinned tweets
-    const config = configService.getConfig();
-    Object.keys(config.pinnedTweetIds).forEach(account => {
+    // Assume config.pinnedTweetIds is available directly
+    const currentConfig = configService.getConfig();
+    Object.keys(currentConfig.pinnedTweetIds).forEach(account => {
       configService.removePinnedTweetId(account);
     });
     
@@ -93,16 +231,17 @@ router.put('/pinned-tweets', (req, res) => {
       configService.addPinnedTweetId(account, tweetId);
     });
     
+    const updatedConfig = configService.getConfig();
+    
     res.json({
       success: true,
-      message: 'Pinned tweet IDs updated',
-      pinnedTweetIds: configService.getConfig().pinnedTweetIds
+      pinnedTweetIds: updatedConfig.pinnedTweetIds
     });
   } catch (error) {
-    console.error('Error updating pinned tweet IDs:', error);
+    console.error('Error updating pinned tweets:', error);
     res.status(500).json({
       success: false,
-      error: error.message || 'Failed to update pinned tweet IDs'
+      error: error.message || 'Error updating pinned tweets'
     });
   }
 });
@@ -123,25 +262,24 @@ router.put('/delays', (req, res) => {
       });
     }
     
-    if (parseInt(minDelay) >= parseInt(maxDelay)) {
+    if (minDelay > maxDelay) {
       return res.status(400).json({
         success: false,
-        error: 'maxDelay must be greater than minDelay'
+        error: 'minDelay cannot be greater than maxDelay'
       });
     }
     
-    configService.updateDelays({ minDelay, maxDelay });
+    const updatedConfig = configService.updateDelays({ minDelay, maxDelay });
     
     res.json({
       success: true,
-      message: 'Delay settings updated',
-      delays: configService.getConfig().delays
+      delays: updatedConfig.delays
     });
   } catch (error) {
-    console.error('Error updating delay settings:', error);
+    console.error('Error updating delays:', error);
     res.status(500).json({
       success: false,
-      error: error.message || 'Failed to update delay settings'
+      error: error.message || 'Error updating delays'
     });
   }
 });
@@ -155,204 +293,143 @@ router.put('/tweet-text', (req, res) => {
   try {
     const { text } = req.body;
     
-    if (!text) {
+    if (text === undefined) {
       return res.status(400).json({
         success: false,
         error: 'Tweet text is required'
       });
     }
     
-    configService.updateTweetText(text);
+    const updatedConfig = configService.updateTweetText(text);
     
     res.json({
       success: true,
-      message: 'Tweet text updated',
-      tweetText: configService.getConfig().tweetText
+      tweetText: updatedConfig.tweetText
     });
   } catch (error) {
     console.error('Error updating tweet text:', error);
     res.status(500).json({
       success: false,
-      error: error.message || 'Failed to update tweet text'
+      error: error.message || 'Error updating tweet text'
     });
   }
 });
 
 /**
  * @route PUT /api/config/tweets-per-account
- * @desc Update tweets per account setting
+ * @desc Update tweets per account
  * @access Public
  */
 router.put('/tweets-per-account', (req, res) => {
   try {
     const { count } = req.body;
     
-    if (!count || typeof count !== 'number' || count < 1) {
+    if (count === undefined) {
       return res.status(400).json({
         success: false,
-        error: 'Invalid tweets per account value. Must be a positive number.'
+        error: 'Tweets per account count is required'
       });
     }
     
-    configService.updateTweetsPerAccount(count);
+    const updatedConfig = configService.updateTweetsPerAccount(count);
     
     res.json({
       success: true,
-      message: 'Tweets per account updated successfully',
-      config: configService.getConfig()
+      tweetsPerAccount: updatedConfig.tweetsPerAccount
     });
   } catch (error) {
     console.error('Error updating tweets per account:', error);
     res.status(500).json({
       success: false,
-      error: error.message || 'Failed to update tweets per account'
+      error: error.message || 'Error updating tweets per account'
     });
   }
 });
 
+// OpenAI Configuration Routes
+
 /**
- * @route GET /api/config/target-accounts
- * @desc Get all target accounts
+ * @route GET /api/config/openai
+ * @desc Get OpenAI configuration
  * @access Public
  */
-router.get('/target-accounts', (req, res) => {
+router.get('/openai', (req, res) => {
   try {
     const config = configService.getConfig();
+    
+    // Send back the OpenAI configuration including default values for any missing fields
     res.json({
       success: true,
-      accounts: config.targetAccounts || []
+      openai: {
+        apiKey: config.openai?.apiKey ? '••••••••' : '', // Mask the API key if it exists
+        model: config.openai?.model || openaiService.DEFAULT_CONFIG.model,
+        temperature: config.openai?.temperature !== undefined ? config.openai.temperature : openaiService.DEFAULT_CONFIG.temperature,
+        maxTokens: config.openai?.maxTokens || openaiService.DEFAULT_CONFIG.maxTokens,
+        systemPrompt: config.openai?.systemPrompt || openaiService.DEFAULT_CONFIG.systemPrompt,
+        userPromptTemplate: config.openai?.userPromptTemplate || openaiService.DEFAULT_CONFIG.userPromptTemplate
+      }
     });
   } catch (error) {
-    console.error('Error getting target accounts:', error);
+    console.error('Error getting OpenAI config:', error);
     res.status(500).json({
       success: false,
-      error: error.message || 'Failed to get target accounts'
+      error: error.message || 'Error getting OpenAI configuration'
     });
   }
 });
 
 /**
- * @route POST /api/config/target-accounts
- * @desc Add a new target account
- * @access Public
+ * @route PUT /api/config/openai
+ * @desc Update OpenAI configuration
  */
-router.post('/target-accounts', (req, res) => {
+router.put('/openai', async (req, res) => {
   try {
-    const { account, pinnedTweetId } = req.body;
+    const { apiKey, model, temperature, maxTokens, systemPrompt, userPromptTemplate } = req.body;
     
-    if (!account) {
-      return res.status(400).json({
-        success: false,
-        error: 'Account name is required'
-      });
-    }
-    
-    const config = configService.getConfig();
-    const existingAccounts = config.targetAccounts || [];
-    
-    // Check if account already exists
-    if (existingAccounts.some(a => a.account === account)) {
-      return res.status(400).json({
-        success: false,
-        error: 'Account already exists'
-      });
-    }
-    
-    // Add new account
-    const updatedAccounts = [
-      ...existingAccounts, 
-      { account, pinnedTweetId: pinnedTweetId || '' }
+    // Validate model if provided
+    const validModels = [
+      'gpt-3.5-turbo',
+      'gpt-4o-mini',
+      'gpt-4',
+      'gpt-4-turbo',
+      'gpt-4-turbo-preview',
+      'gpt-4o',
+      'gpt-4o-latest',
+      'gpt-4.5-preview'
     ];
     
-    configService.updateTargetAccounts(updatedAccounts);
+    if (model && !validModels.includes(model)) {
+      console.warn(`Warning: Potentially unsupported model requested: ${model}`);
+      // We'll still allow it in case OpenAI adds new models
+    }
     
-    // If pinned tweet ID is provided, update that as well
-    if (pinnedTweetId) {
-      configService.addPinnedTweetId(account, pinnedTweetId);
+    const updatedConfig = configService.updateOpenAIConfig({
+      apiKey,
+      model,
+      temperature,
+      maxTokens,
+      systemPrompt,
+      userPromptTemplate
+    });
+    
+    // Re-initialize OpenAI service with new config
+    await openaiService.initialize();
+    
+    // Mask API key for response
+    const responseConfig = { ...updatedConfig.openai };
+    if (responseConfig.apiKey) {
+      responseConfig.apiKey = '••••••••'; // Use consistent masking
     }
     
     res.json({
       success: true,
-      message: 'Target account added',
-      accounts: configService.getConfig().targetAccounts
+      openai: responseConfig
     });
   } catch (error) {
-    console.error('Error adding target account:', error);
+    console.error('Error updating OpenAI config:', error);
     res.status(500).json({
       success: false,
-      error: error.message || 'Failed to add target account'
-    });
-  }
-});
-
-/**
- * @route DELETE /api/config/target-accounts/:accountName
- * @desc Delete a specific target account
- * @access Public
- */
-router.delete('/target-accounts/:accountName', (req, res) => {
-  try {
-    const { accountName } = req.params;
-    
-    const config = configService.getConfig();
-    const existingAccounts = config.targetAccounts || [];
-    
-    // Filter out the account to delete
-    const updatedAccounts = existingAccounts.filter(a => a.account !== accountName);
-    
-    // If no accounts were removed, the account doesn't exist
-    if (updatedAccounts.length === existingAccounts.length) {
-      return res.status(404).json({
-        success: false,
-        error: 'Account not found'
-      });
-    }
-    
-    configService.updateTargetAccounts(updatedAccounts);
-    
-    // Also remove any pinned tweet ID for this account
-    configService.removePinnedTweetId(accountName);
-    
-    res.json({
-      success: true,
-      message: 'Target account deleted',
-      accounts: configService.getConfig().targetAccounts
-    });
-  } catch (error) {
-    console.error('Error deleting target account:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message || 'Failed to delete target account'
-    });
-  }
-});
-
-/**
- * @route DELETE /api/config/target-accounts
- * @desc Delete all target accounts
- * @access Public
- */
-router.delete('/target-accounts', (req, res) => {
-  try {
-    // Update with an empty array to clear all accounts
-    configService.updateTargetAccounts([]);
-    
-    // Clear all pinned tweet IDs
-    const config = configService.getConfig();
-    Object.keys(config.pinnedTweetIds || {}).forEach(account => {
-      configService.removePinnedTweetId(account);
-    });
-    
-    res.json({
-      success: true,
-      message: 'All target accounts deleted',
-      accounts: []
-    });
-  } catch (error) {
-    console.error('Error deleting all target accounts:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message || 'Failed to delete all target accounts'
+      error: error.message || 'Error updating OpenAI configuration'
     });
   }
 });

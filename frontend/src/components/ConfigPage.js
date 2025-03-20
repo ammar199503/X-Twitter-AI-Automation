@@ -24,7 +24,6 @@ const ConfigPage = () => {
   const navigate = useNavigate();
   const [config, setConfig] = useState({
     delays: { min: '', max: '' },
-    tweetText: '',
     tweetsPerAccount: 10,
   });
   const [isLoading, setIsLoading] = useState(true);
@@ -42,12 +41,15 @@ const ConfigPage = () => {
       setIsLoading(true);
       const { data } = await ApiService.config.getConfig();
       if (data.success) {
+        // Convert milliseconds to seconds for display with consistent formatting
+        const minDelayInSeconds = data.config.delays.minDelay ? (data.config.delays.minDelay / 1000).toString() : '';
+        const maxDelayInSeconds = data.config.delays.maxDelay ? (data.config.delays.maxDelay / 1000).toString() : '';
+        
         setConfig({
           delays: {
-            min: data.config.delays.minDelay || '',
-            max: data.config.delays.maxDelay || '',
+            min: minDelayInSeconds,
+            max: maxDelayInSeconds,
           },
-          tweetText: data.config.tweetText || '',
           tweetsPerAccount: data.config.tweetsPerAccount || 10,
         });
       } else {
@@ -55,7 +57,7 @@ const ConfigPage = () => {
       }
     } catch (error) {
       console.error('Error fetching configuration:', error);
-      setError(error.response?.data?.error || 'Failed to fetch configuration');
+      setError('Failed to fetch configuration');
     } finally {
       setIsLoading(false);
     }
@@ -64,12 +66,14 @@ const ConfigPage = () => {
   const checkTargetAccounts = async () => {
     try {
       const { data } = await ApiService.config.getTargetAccounts();
-      if (!data.success || data.accounts.length === 0) {
+      if (!data.success || (data.accounts.length === 0 && window.location.pathname !== '/config')) {
         navigate('/target-accounts');
       }
     } catch (error) {
       console.error('Error checking target accounts:', error);
-      navigate('/target-accounts');
+      if (window.location.pathname !== '/config') {
+        navigate('/target-accounts');
+      }
     }
   };
 
@@ -87,10 +91,6 @@ const ConfigPage = () => {
     }
   };
 
-  const handleTweetTextChange = (event) => {
-    setConfig({ ...config, tweetText: event.target.value });
-  };
-
   const handleTweetsPerAccountChange = (event) => {
     const value = parseInt(event.target.value, 10);
     if (!isNaN(value) && value >= 1 && value <= 50) {
@@ -104,8 +104,8 @@ const ConfigPage = () => {
       setError('');
       setSuccessMessage('');
 
-      const minDelay = parseFloat(config.delays.min);
-      const maxDelay = parseFloat(config.delays.max);
+      const minDelay = parseFloat(config.delays.min) * 1000;
+      const maxDelay = parseFloat(config.delays.max) * 1000;
 
       if (isNaN(minDelay) || isNaN(maxDelay) || minDelay < 0 || maxDelay < 0) {
         setError('Delays must be positive numbers');
@@ -126,14 +126,11 @@ const ConfigPage = () => {
 
       if (!delaysResponse.data.success) throw new Error('Failed to save delay settings');
 
-      const textResponse = await ApiService.config.setTweetText(config.tweetText);
-      if (!textResponse.data.success) throw new Error('Failed to save tweet text');
-
       const tweetsPerAccountResponse = await ApiService.config.setTweetsPerAccount(config.tweetsPerAccount);
       if (!tweetsPerAccountResponse.data.success) throw new Error('Failed to save tweets per account');
 
       setSuccessMessage('Configuration saved successfully');
-      setTimeout(() => navigate('/dashboard'), 1500);
+      setTimeout(() => navigate('/openai-config'), 1500);
     } catch (error) {
       setError(error.message || 'Failed to save configuration');
     } finally {
@@ -243,7 +240,7 @@ const ConfigPage = () => {
             <CardHeader 
               title={
                 <Typography variant="h5" sx={{ fontWeight: 600 }}>
-                  Configure Scraper
+                  Configure Scraper and Post Delay
                 </Typography>
               }
               sx={{ 
@@ -340,65 +337,6 @@ const ConfigPage = () => {
                       mb: 1
                     }}
                   >
-                    Tweet Text
-                  </Typography>
-                  <Typography 
-                    variant="body2" 
-                    color="text.secondary" 
-                    sx={{ mb: 3, lineHeight: 1.5 }}
-                  >
-                    This text will be posted to X/Twitter alongside screenshots of scraped tweets. Add hashtags or mentions as needed.
-                  </Typography>
-                  <TextField
-                    fullWidth
-                    label="Tweet Text"
-                    value={config.tweetText}
-                    onChange={handleTweetTextChange}
-                    disabled={isSaving}
-                    multiline
-                    rows={3}
-                    InputLabelProps={{ 
-                      shrink: true,
-                      sx: { 
-                        fontSize: '0.9rem',
-                        transform: 'translate(14px, -9px) scale(0.75)'
-                      }
-                    }}
-                    InputProps={{
-                      sx: { 
-                        borderRadius: 2,
-                        '&.Mui-focused': {
-                          boxShadow: '0 0 0 3px rgba(0, 113, 227, 0.15)'
-                        }
-                      },
-                      endAdornment: (
-                        <InputAdornment position="end">
-                          <Typography 
-                            variant="caption" 
-                            sx={{ 
-                              color: config.tweetText.length > 250 ? 'error.main' : 'text.secondary',
-                              fontWeight: 500
-                            }}
-                          >
-                            {config.tweetText.length}/280
-                          </Typography>
-                        </InputAdornment>
-                      ),
-                    }}
-                    helperText="This text will be posted alongside screenshots of the tweets you're sharing"
-                  />
-                </Box>
-
-                <Box>
-                  <Typography 
-                    variant="h6" 
-                    gutterBottom
-                    sx={{ 
-                      fontWeight: 600,
-                      color: 'text.primary',
-                      mb: 1
-                    }}
-                  >
                     Tweets Per Account
                   </Typography>
                   <Typography 
@@ -433,58 +371,52 @@ const ConfigPage = () => {
                     }}
                   />
                 </Box>
-
-                <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 3 }}>
-                  <Button 
-                    variant="contained" 
-                    color="primary" 
-                    onClick={handleSaveConfig} 
-                    disabled={isSaving}
-                    sx={{ 
-                      py: 1.5, 
-                      px: 4, 
-                      borderRadius: 2,
-                      fontWeight: 500,
-                      boxShadow: '0 2px 10px rgba(0, 113, 227, 0.3)',
-                      transition: 'all 0.3s ease',
-                      position: 'relative',
-                      overflow: 'hidden',
-                      '&:hover': {
-                        boxShadow: '0 4px 15px rgba(0, 113, 227, 0.4)',
-                        transform: 'translateY(-2px)'
-                      },
-                      '&:active': {
-                        transform: 'translateY(0px)',
-                        boxShadow: '0 2px 5px rgba(0, 113, 227, 0.2)'
-                      },
-                      '&::after': {
-                        content: '""',
-                        position: 'absolute',
-                        top: 0,
-                        left: 0,
-                        width: '100%',
-                        height: '100%',
-                        background: 'linear-gradient(120deg, rgba(255,255,255,0) 30%, rgba(255,255,255,0.2) 50%, rgba(255,255,255,0) 70%)',
-                        transition: 'all 0.6s ease',
-                        transform: 'translateX(-100%)'
-                      },
-                      '&:hover::after': {
-                        transform: 'translateX(100%)'
-                      }
-                    }}
-                  >
-                    {isSaving ? (
-                      <CircularProgress size={24} thickness={5} sx={{ color: 'white' }} />
-                    ) : (
-                      'Save Configuration'
-                    )}
-                  </Button>
-                </Box>
               </Stack>
             </CardContent>
           </Card>
         </Grid>
       </Grid>
+
+      <Box display="flex" justifyContent="space-between" mt={3}>
+        <Button
+          variant="outlined"
+          startIcon={<ArrowBackIcon />}
+          onClick={() => navigate('/target-accounts')}
+        >
+          Back to Target Accounts
+        </Button>
+        
+        <Button
+          variant="outlined"
+          onClick={() => navigate('/dashboard')}
+          sx={{ 
+            borderRadius: 2,
+            transition: 'all 0.2s ease',
+            '&:hover': {
+              transform: 'translateY(-2px)',
+              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)'
+            }
+          }}
+        >
+          Skip to Dashboard
+        </Button>
+        
+        <Box display="flex" alignItems="center">
+          {successMessage && (
+            <Alert severity="success" sx={{ mr: 2 }}>
+              {successMessage}
+            </Alert>
+          )}
+          <Button
+            variant="contained"
+            color="primary"
+            onClick={handleSaveConfig}
+            disabled={isLoading || isSaving}
+          >
+            {isSaving ? 'Saving...' : 'Save and Continue'}
+          </Button>
+        </Box>
+      </Box>
     </Container>
   );
 };

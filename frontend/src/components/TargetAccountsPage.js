@@ -53,7 +53,7 @@ const TargetAccountsPage = () => {
       setIsLoading(true);
       const { data } = await ApiService.config.getTargetAccounts();
       if (data.success) {
-        setAccounts(data.accounts);
+        setAccounts(data.targetAccounts);
       } else {
         setError(data.error || 'Failed to fetch target accounts');
       }
@@ -90,7 +90,7 @@ const TargetAccountsPage = () => {
       });
 
       if (data.success) {
-        setAccounts(data.accounts);
+        setAccounts(data.targetAccounts);
         setNewAccount({ account: '', pinnedTweetId: '' });
       } else {
         setError(data.error || 'Failed to add target account');
@@ -118,7 +118,7 @@ const TargetAccountsPage = () => {
       const { data } = await ApiService.config.deleteTargetAccount(accountToDelete.account);
 
       if (data.success) {
-        setAccounts(data.accounts);
+        setAccounts(data.targetAccounts);
         setDeleteDialogOpen(false);
         setAccountToDelete(null);
       } else {
@@ -528,7 +528,7 @@ const TargetAccountsPage = () => {
               }
             }}
           >
-            Back to Dashboard
+            Skip to Dashboard
           </Button>
           
           {accounts.length > 0 && (
@@ -568,7 +568,7 @@ const TargetAccountsPage = () => {
                 }
               }}
             >
-              Continue to Configuration
+              Continue to Delay Settings
             </Button>
           )}
         </Grid>

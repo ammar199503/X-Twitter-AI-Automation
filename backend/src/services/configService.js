@@ -9,6 +9,13 @@ let config = {
     password: process.env.TWITTER_PASSWORD || '',
     email: process.env.TWITTER_EMAIL || ''
   },
+  twitterApi: {
+    apiKey: process.env.TWITTER_API_KEY || '',
+    apiSecret: process.env.TWITTER_API_SECRET || '',
+    accessToken: process.env.TWITTER_ACCESS_TOKEN || '',
+    accessSecret: process.env.TWITTER_ACCESS_SECRET || '',
+    bearerToken: process.env.TWITTER_BEARER_TOKEN || '',
+  },
   targetAccounts: [],
   pinnedTweetIds: {},
   delays: {
@@ -16,7 +23,13 @@ let config = {
     maxDelay: parseInt(process.env.MAX_DELAY || '300')
   },
   tweetsPerAccount: parseInt(process.env.TWEETS_PER_ACCOUNT || '10'),
-  tweetText: process.env.TWEET_TEXT_CONTENT || '#aixbt_agent_2'
+  tweetText: process.env.TWEET_TEXT_CONTENT || '#aixbt_agent_2',
+  openai: {
+    apiKey: process.env.OPENAI_API_KEY || '',
+    model: process.env.OPENAI_MODEL || 'gpt-3.5-turbo',
+    temperature: parseFloat(process.env.OPENAI_TEMPERATURE || '0.7'),
+    personalityPrompt: process.env.OPENAI_PERSONALITY_PROMPT || "You are a thoughtful social media manager who rephrases tweets to be more engaging while maintaining the original meaning."
+  }
 };
 
 // Parse pinned tweet IDs from environment
@@ -42,6 +55,13 @@ export const initConfig = () => {
   if (process.env.TWITTER_PASSWORD) config.twitter.password = process.env.TWITTER_PASSWORD;
   if (process.env.TWITTER_EMAIL) config.twitter.email = process.env.TWITTER_EMAIL;
   
+  // Twitter API credentials
+  if (process.env.TWITTER_API_KEY) config.twitterApi.apiKey = process.env.TWITTER_API_KEY;
+  if (process.env.TWITTER_API_SECRET) config.twitterApi.apiSecret = process.env.TWITTER_API_SECRET;
+  if (process.env.TWITTER_ACCESS_TOKEN) config.twitterApi.accessToken = process.env.TWITTER_ACCESS_TOKEN;
+  if (process.env.TWITTER_ACCESS_SECRET) config.twitterApi.accessSecret = process.env.TWITTER_ACCESS_SECRET;
+  if (process.env.TWITTER_BEARER_TOKEN) config.twitterApi.bearerToken = process.env.TWITTER_BEARER_TOKEN;
+  
   if (process.env.TARGET_ACCOUNTS) {
     config.targetAccounts = process.env.TARGET_ACCOUNTS.split(',').map(a => a.trim());
   }
@@ -54,6 +74,12 @@ export const initConfig = () => {
   }
   
   if (process.env.TWEET_TEXT_CONTENT) config.tweetText = process.env.TWEET_TEXT_CONTENT;
+  
+  // OpenAI configuration
+  if (process.env.OPENAI_API_KEY) config.openai.apiKey = process.env.OPENAI_API_KEY;
+  if (process.env.OPENAI_MODEL) config.openai.model = process.env.OPENAI_MODEL;
+  if (process.env.OPENAI_TEMPERATURE) config.openai.temperature = parseFloat(process.env.OPENAI_TEMPERATURE);
+  if (process.env.OPENAI_PERSONALITY_PROMPT) config.openai.personalityPrompt = process.env.OPENAI_PERSONALITY_PROMPT;
   
   // Parse pinned tweet IDs
   config.pinnedTweetIds = {};
@@ -68,6 +94,8 @@ export const initConfig = () => {
   }
   
   console.log('Configuration initialized from environment variables');
+  
+  return config;
 };
 
 /**
@@ -86,6 +114,7 @@ export const updateTwitterCredentials = (credentials) => {
   if (credentials.username) config.twitter.username = credentials.username;
   if (credentials.password) config.twitter.password = credentials.password;
   if (credentials.email) config.twitter.email = credentials.email;
+  return { ...config };
 };
 
 /**
@@ -96,6 +125,7 @@ export const updateTargetAccounts = (accounts) => {
   if (Array.isArray(accounts)) {
     config.targetAccounts = accounts;
   }
+  return { ...config };
 };
 
 /**
@@ -105,6 +135,7 @@ export const updateTargetAccounts = (accounts) => {
  */
 export const addPinnedTweetId = (account, tweetId) => {
   config.pinnedTweetIds[account] = tweetId;
+  return { ...config };
 };
 
 /**
@@ -113,6 +144,7 @@ export const addPinnedTweetId = (account, tweetId) => {
  */
 export const removePinnedTweetId = (account) => {
   delete config.pinnedTweetIds[account];
+  return { ...config };
 };
 
 /**
@@ -122,6 +154,7 @@ export const removePinnedTweetId = (account) => {
 export const updateDelays = (delays) => {
   if (delays.minDelay) config.delays.minDelay = parseInt(delays.minDelay);
   if (delays.maxDelay) config.delays.maxDelay = parseInt(delays.maxDelay);
+  return { ...config };
 };
 
 /**
@@ -130,6 +163,7 @@ export const updateDelays = (delays) => {
  */
 export const updateTweetText = (text) => {
   config.tweetText = text;
+  return { ...config };
 };
 
 /**
@@ -143,5 +177,38 @@ export const updateTweetsPerAccount = (count) => {
   }
   
   config.tweetsPerAccount = count;
-  return config;
+  return { ...config };
+};
+
+/**
+ * Update OpenAI configuration
+ * @param {object} openaiConfig - OpenAI configuration options
+ * @returns {object} Updated config
+ */
+export const updateOpenAIConfig = (openaiConfig) => {
+  if (openaiConfig.apiKey) config.openai.apiKey = openaiConfig.apiKey;
+  if (openaiConfig.model) config.openai.model = openaiConfig.model;
+  if (openaiConfig.temperature !== undefined) config.openai.temperature = parseFloat(openaiConfig.temperature);
+  if (openaiConfig.maxTokens !== undefined) config.openai.maxTokens = parseInt(openaiConfig.maxTokens);
+  if (openaiConfig.systemPrompt) config.openai.systemPrompt = openaiConfig.systemPrompt;
+  if (openaiConfig.userPromptTemplate) config.openai.userPromptTemplate = openaiConfig.userPromptTemplate;
+  // For backward compatibility
+  if (openaiConfig.personalityPrompt) config.openai.personalityPrompt = openaiConfig.personalityPrompt;
+  
+  return { ...config };
+};
+
+/**
+ * Update Twitter API configuration
+ * @param {object} twitterApiConfig - Twitter API configuration options
+ * @returns {object} Updated config
+ */
+export const updateTwitterApiConfig = (twitterApiConfig) => {
+  if (twitterApiConfig.apiKey) config.twitterApi.apiKey = twitterApiConfig.apiKey;
+  if (twitterApiConfig.apiSecret) config.twitterApi.apiSecret = twitterApiConfig.apiSecret;
+  if (twitterApiConfig.accessToken) config.twitterApi.accessToken = twitterApiConfig.accessToken;
+  if (twitterApiConfig.accessSecret) config.twitterApi.accessSecret = twitterApiConfig.accessSecret;
+  if (twitterApiConfig.bearerToken) config.twitterApi.bearerToken = twitterApiConfig.bearerToken;
+  
+  return { ...config };
 }; 

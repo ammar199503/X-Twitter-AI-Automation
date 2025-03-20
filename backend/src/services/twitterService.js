@@ -236,4 +236,27 @@ export const sendTweetWithMedia = async (imageBuffer, mediaType, text) => {
     logService.error("Error posting tweet: " + error.message, 'twitter');
     throw error;
   }
+};
+
+/**
+ * Send a text-only tweet
+ * @param {string} text - Tweet text content
+ * @returns {Promise<boolean>} Whether the tweet was sent successfully
+ */
+export const sendTweet = async (text) => {
+  if (!scraper || !isLoggedIn) {
+    throw new Error('Not logged in to Twitter');
+  }
+  
+  try {
+    logService.info("Posting tweet with text...", 'twitter');
+    
+    // Send the tweet
+    await scraper.sendTweet(text);
+    logService.info("Tweet posted successfully", 'twitter');
+    return true;
+  } catch (error) {
+    logService.error("Error posting tweet: " + error.message, 'twitter');
+    throw error;
+  }
 }; 

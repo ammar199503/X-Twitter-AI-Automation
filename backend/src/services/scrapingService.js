@@ -3,10 +3,9 @@ import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import * as twitterService from './twitterService.js';
 import * as configService from './configService.js';
 import * as logService from './logService.js';
+import * as openaiService from './openaiService.js';
 import { loadProcessedLinks, saveProcessedLink } from '../utils/fileUtils.js';
-import { captureScreenshot } from './screenshotService.js';
 import path from 'path';
-import fs from 'fs-extra';
 import { fileURLToPath } from 'url';
 
 // Set up __dirname equivalent for ES modules
@@ -41,7 +40,7 @@ const cleanTweetUrl = (url) => {
 
 /**
  * Extract tweets directly using Twitter API
- * @returns {Array} List of tweet URLs
+ * @returns {Array} List of tweet objects
  */
 const scrapeTweetsAPI = async () => {
   const config = configService.getConfig();
@@ -109,10 +108,13 @@ const scrapeTweetsAPI = async () => {
 /**
  * Initialize the scraping service
  */
-export const initialize = () => {
+export const initialize = async () => {
   // Load processed links from file
   processedLinks = loadProcessedLinks();
   logService.info(`Loaded ${processedLinks.size} processed tweet links`, 'scraper');
+  
+  // Initialize OpenAI service
+  await openaiService.initialize();
 };
 
 /**
@@ -132,11 +134,10 @@ export const startScraping = async () => {
   
   // Initialize if needed
   if (processedLinks.size === 0) {
-    initialize();
+    await initialize();
   }
   
   const config = configService.getConfig();
-  const { delays, tweetText } = config;
   
   isRunning = true;
   logService.info("Starting scraping process", 'scraper');
@@ -152,53 +153,69 @@ export const startScraping = async () => {
       const tweets = await scrapeTweetsAPI();
       logService.info(`Found ${tweets.length} new tweets to process`, 'scraper');
       
-      // Process each new tweet
-      for (const tweet of tweets) {
-        if (!isRunning) break;
+      if (tweets.length === 0) {
+        logService.info("No new tweets to process, waiting for next cycle", 'scraper');
+        return;
+      }
+      
+      // Filter out tweets we've already processed
+      const unprocessedTweets = tweets.filter(tweet => !processedLinks.has(tweet.url));
+      
+      if (unprocessedTweets.length === 0) {
+        logService.info("All tweets have been processed already, waiting for next cycle", 'scraper');
+        return;
+      }
+      
+      logService.info(`Processing batch of ${unprocessedTweets.length} unprocessed tweets`, 'scraper');
+      
+      try {
+        // Process tweets in batch to find all relevant crypto news
+        const rephrasedTweets = await openaiService.processTweetBatch(unprocessedTweets);
         
-        logService.info(`Processing tweet: ${tweet.url}`, 'scraper');
-        
-        // Skip if already processed
-        if (processedLinks.has(tweet.url)) {
-          logService.info(`Skipping already processed tweet: ${tweet.url}`, 'scraper');
-          continue;
-        }
-        
-        try {
-          // Capture screenshot
-          const screenshotPath = await captureScreenshot(tweet.url);
+        if (rephrasedTweets && rephrasedTweets.length > 0) {
+          logService.info(`Found ${rephrasedTweets.length} relevant crypto news tweets`, 'scraper');
           
-          if (screenshotPath) {
-            logService.info(`Screenshot captured: ${screenshotPath}`, 'scraper');
+          // Post each rephrased tweet with configured delays
+          for (const tweet of rephrasedTweets) {
+            if (!isRunning) break;
             
-            // Read image file
-            const imageBuffer = fs.readFileSync(screenshotPath);
-            const ext = path.extname(screenshotPath).toLowerCase();
-            const mediaType = ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : 'image/png';
-            
-            // Post tweet with image
-            await twitterService.sendTweetWithMedia(imageBuffer, mediaType, tweetText);
-            
-            // Mark as processed
+            try {
+              await twitterService.sendTweet(tweet);
+              logService.info(`Posted crypto news tweet successfully: ${tweet.substring(0, 50)}...`, 'scraper');
+              
+              // Add delay between tweets
+              if (isRunning && rephrasedTweets.indexOf(tweet) < rephrasedTweets.length - 1) {
+                const { minDelay, maxDelay } = config.delays;
+                const delay = Math.floor(Math.random() * (maxDelay - minDelay + 1)) + minDelay;
+                logService.info(`Waiting ${delay/1000} seconds before next tweet...`, 'scraper');
+                await new Promise(resolve => setTimeout(resolve, delay));
+              }
+            } catch (tweetError) {
+              logService.error(`Error posting tweet: ${tweetError.message}`, 'scraper');
+              // Continue with next tweet even if one fails
+            }
+          }
+          
+          // Mark all tweets as processed after successful posting
+          for (const tweet of unprocessedTweets) {
             saveProcessedLink(tweet.url);
             processedLinks.add(tweet.url);
-            
-            logService.info(`Successfully processed tweet: ${tweet.url}`, 'scraper');
-            
-            // Wait random delay before next tweet
-            if (isRunning && tweets.indexOf(tweet) < tweets.length - 1) {
-              const { minDelay, maxDelay } = config.delays;
-              // Ensure we're using the correct values and calculation
-              const delay = Math.floor(Math.random() * (maxDelay - minDelay + 1)) + minDelay;
-              logService.info(`Waiting ${delay/1000} seconds before next tweet...`, 'scraper');
-              await new Promise(resolve => setTimeout(resolve, delay));
-            }
-          } else {
-            logService.error(`Failed to capture screenshot for: ${tweet.url}`, 'scraper');
           }
-        } catch (tweetError) {
-          logService.error(`Error processing tweet ${tweet.url}: ${tweetError.message}`, 'scraper');
-          // Continue with next tweet
+        } else {
+          logService.info("No relevant crypto news found in these tweets", 'scraper');
+          
+          // Mark tweets as processed even if they weren't relevant
+          for (const tweet of unprocessedTweets) {
+            saveProcessedLink(tweet.url);
+            processedLinks.add(tweet.url);
+          }
+        }
+      } catch (batchError) {
+        logService.error(`Error processing tweet batch: ${batchError.message}`, 'scraper');
+        // Mark tweets as processed even if there was an error
+        for (const tweet of unprocessedTweets) {
+          saveProcessedLink(tweet.url);
+          processedLinks.add(tweet.url);
         }
       }
       
@@ -212,7 +229,7 @@ export const startScraping = async () => {
   await performScrapingCycle();
   
   // Schedule periodic scraping
-  const cycleDelay = Math.max(60000, delays.maxDelay); // At least 1 minute between cycles
+  const cycleDelay = Math.max(60000, config.delays.maxDelay); // At least 1 minute between cycles
   scrapingInterval = setInterval(performScrapingCycle, cycleDelay);
   
   return true;
