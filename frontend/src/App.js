@@ -13,7 +13,6 @@ import Dashboard from './components/Dashboard';
 import TargetAccountsPage from './components/TargetAccountsPage';
 import ConfigPage from './components/ConfigPage';
 import OpenAIConfigPage from './components/OpenAIConfigPage';
-import StatusPage from './components/StatusPage';
 import TermsOfService from './components/TermsOfService';
 import PrivacyPolicy from './components/PrivacyPolicy';
 
@@ -216,7 +215,7 @@ function App() {
             <Route path="/target-accounts" element={<TargetAccountsPage />} />
             <Route path="/config" element={<ConfigPage />} />
             <Route path="/openai-config" element={<OpenAIConfigPage />} />
-            <Route path="/status" element={<StatusPage />} />
+            <Route path="/status" element={<Navigate to="/dashboard" replace />} />
             <Route path="/terms" element={<TermsOfService />} />
             <Route path="/privacy" element={<PrivacyPolicy />} />
             <Route path="*" element={<Navigate to="/" replace />} />

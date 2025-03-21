@@ -2,12 +2,43 @@ import express from 'express';
 import * as scrapingService from '../services/scrapingService.js';
 import { clearProcessedLinks, loadProcessedLinks } from '../utils/fileUtils.js';
 import * as logService from '../services/logService.js';
+import * as configService from '../services/configService.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
 const router = express.Router();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+/**
+ * @route GET /api/scrape/status
+ * @desc Get current scraping status
+ * @access Public
+ */
+router.get('/status', (req, res) => {
+  try {
+    const status = scrapingService.getStatus();
+    const config = configService.getConfig();
+    const processedLinks = loadProcessedLinks();
+    
+    res.json({
+      success: true,
+      isRunning: status.isRunning,
+      isPaused: status.isPaused,
+      pauseReason: status.pauseReason,
+      processedLinksCount: processedLinks.size,
+      targetAccounts: config.targetAccounts || []
+    });
+  } catch (error) {
+    console.error('Error getting scraping status:', error);
+    logService.error(`Error getting scraping status: ${error.message}`, 'system');
+    
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to get scraping status'
+    });
+  }
+});
 
 /**
  * @route POST /api/scrape/start

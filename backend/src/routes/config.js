@@ -141,6 +141,14 @@ router.post('/target-accounts', (req, res) => {
     // Get current config
     const config = configService.getConfig();
     
+    // Check if maximum accounts limit reached (70 accounts)
+    if (config.targetAccounts.length >= 70) {
+      return res.status(400).json({
+        success: false,
+        error: 'Maximum limit of 70 target accounts reached. Please remove some accounts before adding new ones.'
+      });
+    }
+    
     // Check if account already exists
     const existingAccount = config.targetAccounts.find(a => {
       if (typeof a === 'string') {
@@ -533,8 +541,19 @@ router.post('/target-accounts/import-csv', upload.single('csvFile'), (req, res) 
         // Filter out accounts that already exist
         const newAccounts = results.filter(acc => !existingAccountsMap[acc.account]);
         
+        // Check if adding new accounts would exceed the 70 accounts limit
+        let accountsSkippedDueToLimit = 0;
+        let accountsToImport = [...newAccounts];
+        
+        if (config.targetAccounts.length + newAccounts.length > 70) {
+          // Instead of rejecting the import, only take as many accounts as we can fit
+          const availableSlots = 70 - config.targetAccounts.length;
+          accountsToImport = newAccounts.slice(0, availableSlots);
+          accountsSkippedDueToLimit = newAccounts.length - availableSlots;
+        }
+        
         // Add new accounts to the existing ones
-        const updatedAccounts = [...config.targetAccounts, ...newAccounts];
+        const updatedAccounts = [...config.targetAccounts, ...accountsToImport];
         const updatedConfig = configService.updateTargetAccounts(updatedAccounts);
         
         // Clean up the temporary file
@@ -545,7 +564,11 @@ router.post('/target-accounts/import-csv', upload.single('csvFile'), (req, res) 
         res.json({
           success: true,
           targetAccounts: updatedConfig.targetAccounts,
-          imported: newAccounts.length
+          totalFound: results.length,
+          duplicatesSkipped: results.length - newAccounts.length,
+          accountsSkippedDueToLimit: accountsSkippedDueToLimit,
+          imported: accountsToImport.length,
+          totalAccounts: updatedAccounts.length
         });
       })
       .on('error', (error) => {

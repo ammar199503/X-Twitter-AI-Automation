@@ -573,26 +573,6 @@ const Dashboard = () => {
         </Box>
       </Box>
 
-      {/* Authentication Alert - Add this block */}
-      {status && checkAuthenticationStatus() && (
-        <Alert 
-          severity="warning" 
-          sx={{ mb: 3 }}
-          action={
-            <Button 
-              color="inherit" 
-              size="small" 
-              onClick={() => navigate('/status')}
-            >
-              Fix Now
-            </Button>
-          }
-        >
-          <AlertTitle>Authentication Required</AlertTitle>
-          Twitter authentication is needed to continue scraping. Please visit the status page to reauthenticate.
-        </Alert>
-      )}
-
       <Grid container spacing={4}>
         {/* Status Card */}
         <Grid item xs={12}>

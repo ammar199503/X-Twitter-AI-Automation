@@ -219,9 +219,63 @@ const ApiService = {
   getAppStatus: async () => {
     try {
       console.log("Fetching app status for routing decision...");
-      const response = await API.get('/status');
-      console.log("App status response:", response.data);
-      return response;
+      
+      // Get scraper status - contains most of the application state
+      const scraperResponse = await API.get('/scrape/status').catch(error => {
+        console.error("Error fetching scraper status:", error);
+        return { data: {} };
+      });
+      
+      // Get auth status - contains login information
+      const authResponse = await API.get('/auth/status').catch(error => {
+        console.error("Error fetching auth status:", error);
+        return { data: { isLoggedIn: false } };
+      });
+      
+      // Get config information
+      const configResponse = await API.get('/config').catch(error => {
+        console.error("Error fetching config:", error);
+        return { data: { config: {} } };
+      });
+      
+      // Combine all data into a compatible format expected by the dashboard
+      const combinedResponse = {
+        data: {
+          success: true,
+          status: {
+            // Core status fields
+            isRunning: scraperResponse.data?.isRunning || false,
+            isPaused: scraperResponse.data?.isPaused || false,
+            pauseReason: scraperResponse.data?.pauseReason || null,
+            
+            // Authentication status
+            isLoggedIn: authResponse.data?.isLoggedIn || false,
+            username: authResponse.data?.username || null,
+            twitterLoggedIn: authResponse.data?.isLoggedIn || false,
+            
+            // Scraper info
+            scraperStatus: {
+              isRunning: scraperResponse.data?.isRunning || false,
+              isPaused: scraperResponse.data?.isPaused || false,
+              pauseReason: scraperResponse.data?.pauseReason || null,
+              processedLinksCount: scraperResponse.data?.processedLinksCount || 0
+            },
+            
+            // Config data
+            targetAccounts: configResponse.data?.config?.targetAccounts || [],
+            delays: {
+              min: configResponse.data?.config?.delays?.minDelay || 30000,
+              max: configResponse.data?.config?.delays?.maxDelay || 60000,
+              minDelay: configResponse.data?.config?.delays?.minDelay || 30000,
+              maxDelay: configResponse.data?.config?.delays?.maxDelay || 60000
+            },
+            tweetsPerAccount: configResponse.data?.config?.tweetsPerAccount || 3
+          }
+        }
+      };
+      
+      console.log("App status response (combined):", combinedResponse.data);
+      return combinedResponse;
     } catch (error) {
       console.error("Error fetching app status:", error);
       // Return a structured error response instead of throwing
@@ -285,36 +339,6 @@ const ApiService = {
         success: false,
         error: error.message || 'Failed to clear logs'
       };
-    }
-  },
-
-  // New methods for handling authentication and pausing
-  status: {
-    pause: async (reason) => {
-      try {
-        return await API.post('/status/pause', { reason });
-      } catch (error) {
-        console.error('Error pausing scraping:', error);
-        throw error;
-      }
-    },
-    
-    resume: async () => {
-      try {
-        return await API.post('/status/resume');
-      } catch (error) {
-        console.error('Error resuming scraping:', error);
-        throw error;
-      }
-    },
-    
-    reauthenticate: async (credentials) => {
-      try {
-        return await API.post('/status/reauthenticate', credentials);
-      } catch (error) {
-        console.error('Error reauthenticating with Twitter:', error);
-        throw error;
-      }
     }
   }
 };

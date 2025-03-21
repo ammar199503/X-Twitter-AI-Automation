@@ -149,6 +149,9 @@ Automatically collect tweets on your target accounts, process them with AI, and 
 ![Settings](screenshots/Scrapper-and-delay-settings.png)
 ![API Configuration](screenshots/API-Settings.png)
 
+## Video Guide
+A video guide (Guide.mov) is available in the screenshots folder of your local installation. This file is not included in the GitHub repository due to size constraints.
+
 ## Need Help?
 If you have questions, please contact us via GitHub issues.
 

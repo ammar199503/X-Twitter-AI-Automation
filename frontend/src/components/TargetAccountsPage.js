@@ -33,6 +33,9 @@ import {
   ArrowBack as ArrowBackIcon,
   DeleteSweep as DeleteSweepIcon,
   CloudUpload as CloudUploadIcon,
+  Error as ErrorIcon,
+  Warning as WarningIcon,
+  Info as InfoIcon,
 } from '@mui/icons-material';
 import ApiService from '../services/api';
 
@@ -47,6 +50,13 @@ const TargetAccountsPage = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteAllDialogOpen, setDeleteAllDialogOpen] = useState(false);
   const [accountToDelete, setAccountToDelete] = useState(null);
+  const [infoDialogOpen, setInfoDialogOpen] = useState(false);
+  const [infoDialogMessage, setInfoDialogMessage] = useState('');
+  const [infoDialogTitle, setInfoDialogTitle] = useState('');
+  const [infoDialogIcon, setInfoDialogIcon] = useState('info'); // 'error', 'warning', or 'info'
+  const [confirmImportDialogOpen, setConfirmImportDialogOpen] = useState(false);
+  const [fileToImport, setFileToImport] = useState(null);
+  const [estimatedAccountCount, setEstimatedAccountCount] = useState(0);
   const fileInputRef = useRef(null);
 
   useEffect(() => {
@@ -75,19 +85,51 @@ const TargetAccountsPage = () => {
     setNewAccount({ ...newAccount, [name]: value });
   };
 
+  const showInfoDialog = (title, message, icon = 'info') => {
+    setInfoDialogTitle(title);
+    setInfoDialogMessage(message);
+    setInfoDialogIcon(icon);
+    setInfoDialogOpen(true);
+  };
+
   const handleAddAccount = async () => {
     // Validate account name
     if (!newAccount.account.trim()) {
-      setError('Please enter a valid X/Twitter account name');
+      showInfoDialog('Validation Error', 'Please enter a valid X/Twitter account name', 'error');
+      return;
+    }
+
+    // Check for the account limit on the client side first
+    if (accounts.length >= 70) {
+      showInfoDialog(
+        'Account Limit Reached', 
+        'You have reached the maximum limit of 70 target accounts. Please remove some accounts before adding new ones.',
+        'warning'
+      );
+      return;
+    }
+
+    // Check for duplicate account on the client side
+    const accountName = newAccount.account.trim().replace(/^@/, '');
+    const isDuplicate = accounts.some(account => {
+      if (typeof account === 'string') {
+        return account === accountName;
+      }
+      return account.account === accountName;
+    });
+
+    if (isDuplicate) {
+      showInfoDialog(
+        'Duplicate Account', 
+        `The account @${accountName} is already in your target accounts list.`,
+        'warning'
+      );
       return;
     }
 
     try {
       setIsSaving(true);
       setError('');
-
-      // Format the account name (remove @ if present)
-      const accountName = newAccount.account.trim().replace(/^@/, '');
       
       const { data } = await ApiService.config.addTargetAccount({
         account: accountName,
@@ -98,11 +140,15 @@ const TargetAccountsPage = () => {
         setAccounts(data.targetAccounts);
         setNewAccount({ account: '', pinnedTweetId: '' });
       } else {
-        setError(data.error || 'Failed to add target account');
+        showInfoDialog('Error', data.error || 'Failed to add target account', 'error');
       }
     } catch (error) {
       console.error('Error adding target account:', error);
-      setError(error.response?.data?.error || 'Failed to add target account');
+      showInfoDialog(
+        'Error', 
+        error.response?.data?.error || 'Failed to add target account',
+        'error'
+      );
     } finally {
       setIsSaving(false);
     }
@@ -163,6 +209,38 @@ const TargetAccountsPage = () => {
     const file = event.target.files[0];
     if (!file) return;
 
+    // Check file size - show warning if file is large (> 100KB)
+    if (file.size > 100 * 1024) {
+      // Large file might contain many accounts - estimate count based on average row size
+      const estimatedRows = Math.floor(file.size / 40); // Assuming ~40 bytes per row
+      
+      if (estimatedRows > 100) {
+        setFileToImport(file);
+        setEstimatedAccountCount(estimatedRows);
+        setConfirmImportDialogOpen(true);
+        return;
+      }
+    }
+
+    // Proceed with import
+    processImport(file);
+  };
+
+  const processImport = async (file) => {
+    // Check for account limit on the client side first
+    if (accounts.length >= 70) {
+      showInfoDialog(
+        'Account Limit Reached', 
+        'You have reached the maximum limit of 70 target accounts. Please remove some accounts before importing new ones.',
+        'warning'
+      );
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+      return;
+    }
+
     const formData = new FormData();
     formData.append('csvFile', file);
 
@@ -174,12 +252,44 @@ const TargetAccountsPage = () => {
 
       if (data.success) {
         setAccounts(data.targetAccounts);
+        
+        // Construct a detailed import message
+        let message = "";
+        if (data.totalFound) {
+          message += `📊 Found ${data.totalFound} accounts in the CSV file.\n\n`;
+        }
+        
+        if (data.imported > 0) {
+          message += `✅ Successfully imported ${data.imported} new accounts.\n\n`;
+        } else {
+          message += `ℹ️ No new accounts were imported.\n\n`;
+        }
+        
+        if (data.duplicatesSkipped && data.duplicatesSkipped > 0) {
+          message += `🔄 ${data.duplicatesSkipped} duplicates were skipped.\n\n`;
+        }
+        
+        if (data.accountsSkippedDueToLimit && data.accountsSkippedDueToLimit > 0) {
+          message += `⚠️ ${data.accountsSkippedDueToLimit} accounts were skipped due to the 70 account limit.\n\n`;
+        }
+        
+        message += `Current total: ${data.totalAccounts || data.targetAccounts.length}/70 accounts.`;
+        
+        showInfoDialog(
+          data.imported > 0 ? 'Import Successful' : 'Import Complete',
+          message,
+          data.accountsSkippedDueToLimit > 0 ? 'warning' : 'info'
+        );
       } else {
-        setError(data.error || 'Failed to import target accounts from CSV');
+        showInfoDialog('Import Failed', data.error || 'Failed to import target accounts from CSV', 'error');
       }
     } catch (error) {
       console.error('Error importing target accounts from CSV:', error);
-      setError(error.response?.data?.error || 'Failed to import target accounts from CSV');
+      showInfoDialog(
+        'Import Error', 
+        error.response?.data?.error || 'Failed to import target accounts from CSV',
+        'error'
+      );
     } finally {
       setIsImporting(false);
       // Reset file input
@@ -221,6 +331,7 @@ const TargetAccountsPage = () => {
             boxShadow: '0 2px 10px rgba(0, 0, 0, 0.05)',
             animation: 'fadeIn 0.3s ease-out'
           }}
+          onClose={() => setError('')}
         >
           {error}
         </Alert>
@@ -300,23 +411,29 @@ const TargetAccountsPage = () => {
                     sx={{ display: 'none' }}
                     inputProps={{ accept: '.csv' }}
                   />
-                  <Tooltip title="Import accounts from CSV. Column A should contain usernames and Column B should contain Tweet IDs.">
-                    <Button
-                      variant="outlined"
-                      startIcon={isImporting ? <CircularProgress size={20} /> : <CloudUploadIcon />}
-                      onClick={triggerFileInput}
-                      disabled={isImporting}
-                      sx={{ 
-                        borderRadius: 2,
-                        ml: 2,
-                        transition: 'all 0.2s ease',
-                        '&:hover': {
-                          backgroundColor: 'rgba(0, 113, 227, 0.08)'
-                        }
-                      }}
-                    >
-                      Import CSV
-                    </Button>
+                  <Tooltip title={
+                    accounts.length >= 70 
+                      ? "Maximum limit of 70 accounts reached. Remove some accounts before importing." 
+                      : "Import accounts from CSV. Column A should contain usernames and Column B should contain Tweet IDs."
+                  }>
+                    <span> {/* Use span as wrapper to show tooltip even when button is disabled */}
+                      <Button
+                        variant="outlined"
+                        startIcon={isImporting ? <CircularProgress size={20} /> : <CloudUploadIcon />}
+                        onClick={triggerFileInput}
+                        disabled={isImporting || accounts.length >= 70}
+                        sx={{ 
+                          borderRadius: 2,
+                          ml: 2,
+                          transition: 'all 0.2s ease',
+                          '&:hover': {
+                            backgroundColor: 'rgba(0, 113, 227, 0.08)'
+                          }
+                        }}
+                      >
+                        Import CSV
+                      </Button>
+                    </span>
                   </Tooltip>
                 </Box>
               </Box>
@@ -407,25 +524,32 @@ const TargetAccountsPage = () => {
                   />
                 </Grid>
                 <Grid item xs={12} sm={2}>
-                  <Button
-                    fullWidth
-                    variant="contained"
-                    startIcon={isSaving ? <CircularProgress size={20} /> : <AddIcon />}
-                    onClick={handleAddAccount}
-                    disabled={isSaving || !newAccount.account.trim()}
-                    sx={{ 
-                      borderRadius: 2, 
-                      py: 1.5, 
-                      boxShadow: '0 2px 10px rgba(0, 113, 227, 0.2)',
-                      transition: 'all 0.2s ease',
-                      '&:hover': {
-                        transform: 'translateY(-2px)',
-                        boxShadow: '0 4px 15px rgba(0, 113, 227, 0.3)'
-                      }
-                    }}
+                  <Tooltip 
+                    title={accounts.length >= 70 ? "Maximum limit of 70 accounts reached" : ""}
+                    placement="top"
                   >
-                    Add
-                  </Button>
+                    <div style={{ width: '100%' }}>
+                      <Button
+                        fullWidth
+                        variant="contained"
+                        startIcon={isSaving ? <CircularProgress size={20} /> : <AddIcon />}
+                        onClick={handleAddAccount}
+                        disabled={isSaving || !newAccount.account.trim() || accounts.length >= 70}
+                        sx={{ 
+                          borderRadius: 2, 
+                          py: 1.5, 
+                          boxShadow: '0 2px 10px rgba(0, 113, 227, 0.2)',
+                          transition: 'all 0.2s ease',
+                          '&:hover': {
+                            transform: 'translateY(-2px)',
+                            boxShadow: '0 4px 15px rgba(0, 113, 227, 0.3)'
+                          }
+                        }}
+                      >
+                        Add
+                      </Button>
+                    </div>
+                  </Tooltip>
                 </Grid>
               </Grid>
             </CardContent>
@@ -451,7 +575,7 @@ const TargetAccountsPage = () => {
                   variant="h6"
                   sx={{ fontWeight: 600 }}
                 >
-                  Target Accounts ({accounts.length})
+                  Target Accounts ({accounts.length}/70)
                 </Typography>
                 {accounts.length > 0 && (
                   <Button
@@ -471,6 +595,37 @@ const TargetAccountsPage = () => {
                     Remove All
                   </Button>
                 )}
+              </Box>
+
+              {/* Add progress bar showing account limit usage */}
+              <Box sx={{ mb: 3, display: 'flex', alignItems: 'center', gap: 2 }}>
+                <Box 
+                  sx={{ 
+                    flexGrow: 1, 
+                    height: '6px', 
+                    backgroundColor: 'rgba(0, 0, 0, 0.05)', 
+                    borderRadius: '3px',
+                    overflow: 'hidden'
+                  }}
+                >
+                  <Box 
+                    sx={{ 
+                      height: '100%', 
+                      width: `${(accounts.length / 70) * 100}%`,
+                      backgroundColor: accounts.length >= 63 ? (accounts.length >= 70 ? 'error.main' : 'warning.main') : 'primary.main',
+                      transition: 'width 0.3s ease, background-color 0.3s ease'
+                    }} 
+                  />
+                </Box>
+                <Typography 
+                  variant="caption" 
+                  sx={{ 
+                    fontWeight: 600, 
+                    color: accounts.length >= 63 ? (accounts.length >= 70 ? 'error.main' : 'warning.main') : 'text.secondary'
+                  }}
+                >
+                  {accounts.length >= 70 ? 'LIMIT REACHED' : `${70 - accounts.length} REMAINING`}
+                </Typography>
               </Box>
 
               {accounts.length === 0 ? (
@@ -764,6 +919,151 @@ const TargetAccountsPage = () => {
             }}
           >
             {isSaving ? <CircularProgress size={24} thickness={4} /> : "Delete All"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Information Dialog */}
+      <Dialog
+        open={infoDialogOpen}
+        onClose={() => setInfoDialogOpen(false)}
+        PaperProps={{
+          sx: {
+            borderRadius: 4,
+            boxShadow: '0 10px 40px rgba(0, 0, 0, 0.1)',
+            p: 1,
+            maxWidth: '500px'
+          }
+        }}
+      >
+        <DialogTitle 
+          sx={{ 
+            fontWeight: 600,
+            pb: 1,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1
+          }}
+        >
+          {infoDialogIcon === 'error' && <ErrorIcon color="error" />}
+          {infoDialogIcon === 'warning' && <WarningIcon color="warning" />}
+          {infoDialogIcon === 'info' && <InfoIcon color="info" />}
+          {infoDialogTitle}
+        </DialogTitle>
+        <DialogContent>
+          {infoDialogMessage.split('\n').map((line, index) => (
+            <Typography 
+              key={index} 
+              variant="body1" 
+              sx={{ 
+                color: 'text.primary',
+                mb: line.trim() === '' ? 0.5 : 1.5,
+                lineHeight: 1.4,
+                fontWeight: line.includes('✅') || line.includes('⚠️') ? 500 : 400,
+              }}
+            >
+              {line}
+            </Typography>
+          ))}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 3 }}>
+          <Button 
+            onClick={() => setInfoDialogOpen(false)}
+            variant="contained"
+            sx={{ 
+              borderRadius: 2,
+              transition: 'all 0.2s ease',
+              boxShadow: '0 2px 8px rgba(0, 113, 227, 0.2)',
+              '&:hover': {
+                boxShadow: '0 4px 12px rgba(0, 113, 227, 0.3)'
+              }
+            }}
+          >
+            OK
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Confirmation Dialog for Large CSV Import */}
+      <Dialog
+        open={confirmImportDialogOpen}
+        onClose={() => {
+          setConfirmImportDialogOpen(false);
+          if (fileInputRef.current) {
+            fileInputRef.current.value = "";
+          }
+        }}
+        PaperProps={{
+          sx: {
+            borderRadius: 4,
+            boxShadow: '0 10px 40px rgba(0, 0, 0, 0.1)',
+            p: 1,
+            maxWidth: '500px'
+          }
+        }}
+      >
+        <DialogTitle 
+          sx={{ 
+            fontWeight: 600,
+            pb: 1,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1
+          }}
+        >
+          <WarningIcon color="warning" />
+          Large CSV File Detected
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body1" sx={{ mb: 2 }}>
+            The CSV file you selected appears to contain approximately {estimatedAccountCount} accounts.
+          </Typography>
+          <Typography variant="body1" sx={{ mb: 2 }}>
+            Due to the 70 account limit, only the first {70 - accounts.length > 0 ? 70 - accounts.length : 0} accounts can be imported if there's space available.
+          </Typography>
+          <Typography variant="body1" sx={{ mb: 2 }}>
+            Would you like to continue with the import?
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 3 }}>
+          <Button 
+            onClick={() => {
+              setConfirmImportDialogOpen(false);
+              if (fileInputRef.current) {
+                fileInputRef.current.value = "";
+              }
+            }}
+            variant="outlined"
+            sx={{ 
+              borderRadius: 2,
+              transition: 'all 0.2s ease',
+              '&:hover': {
+                backgroundColor: 'rgba(0, 0, 0, 0.03)'
+              }
+            }}
+          >
+            Cancel
+          </Button>
+          <Button 
+            onClick={() => {
+              setConfirmImportDialogOpen(false);
+              if (fileToImport) {
+                processImport(fileToImport);
+                setFileToImport(null);
+              }
+            }}
+            variant="contained"
+            color="primary"
+            sx={{ 
+              borderRadius: 2,
+              ml: 2,
+              boxShadow: '0 2px 8px rgba(0, 113, 227, 0.2)',
+              '&:hover': {
+                boxShadow: '0 4px 12px rgba(0, 113, 227, 0.3)'
+              }
+            }}
+          >
+            Import Anyway
           </Button>
         </DialogActions>
       </Dialog>
