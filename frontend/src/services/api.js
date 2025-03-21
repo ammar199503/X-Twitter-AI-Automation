@@ -42,6 +42,15 @@ const ApiService = {
     },
     getStatus: async () => {
       return API.get('/auth/status');
+    },
+    handleBotDetection: async () => {
+      try {
+        console.log('Attempting to handle Twitter bot detection...');
+        return await API.post('/auth/handle-detection');
+      } catch (error) {
+        console.error('Error handling bot detection:', error);
+        throw error;
+      }
     }
   },
   
@@ -50,8 +59,8 @@ const ApiService = {
     start: async () => {
       return API.post('/scrape/start');
     },
-    stop: async () => {
-      return API.post('/scrape/stop');
+    stop: async (immediate = true) => {
+      return API.post('/scrape/stop', { immediate });
     },
     getStatus: async () => {
       return API.get('/scrape/status');
@@ -67,9 +76,9 @@ const ApiService = {
         throw error;
       }
     },
-    stopScraper: async () => {
+    stopScraper: async (immediate = true) => {
       try {
-        return await API.post('/scrape/stop');
+        return await API.post('/scrape/stop', { immediate });
       } catch (error) {
         console.error('Error stopping scraper:', error);
         throw error;
@@ -188,6 +197,21 @@ const ApiService = {
         console.error('Error updating OpenAI config:', error);
         throw error;
       }
+    },
+    
+    importTargetAccountsFromCsv: async (formData) => {
+      try {
+        // Set different content type for FormData
+        const response = await API.post('/config/target-accounts/import-csv', formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data'
+          }
+        });
+        return response;
+      } catch (error) {
+        console.error('Error importing target accounts from CSV:', error);
+        throw error;
+      }
     }
   },
   
@@ -261,6 +285,36 @@ const ApiService = {
         success: false,
         error: error.message || 'Failed to clear logs'
       };
+    }
+  },
+
+  // New methods for handling authentication and pausing
+  status: {
+    pause: async (reason) => {
+      try {
+        return await API.post('/status/pause', { reason });
+      } catch (error) {
+        console.error('Error pausing scraping:', error);
+        throw error;
+      }
+    },
+    
+    resume: async () => {
+      try {
+        return await API.post('/status/resume');
+      } catch (error) {
+        console.error('Error resuming scraping:', error);
+        throw error;
+      }
+    },
+    
+    reauthenticate: async (credentials) => {
+      try {
+        return await API.post('/status/reauthenticate', credentials);
+      } catch (error) {
+        console.error('Error reauthenticating with Twitter:', error);
+        throw error;
+      }
     }
   }
 };

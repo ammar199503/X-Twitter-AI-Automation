@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -24,12 +24,15 @@ import {
   Typography,
   Alert,
   Paper,
+  Input,
+  Tooltip,
 } from '@mui/material';
 import {
   Add as AddIcon,
   Delete as DeleteIcon,
   ArrowBack as ArrowBackIcon,
   DeleteSweep as DeleteSweepIcon,
+  CloudUpload as CloudUploadIcon,
 } from '@mui/icons-material';
 import ApiService from '../services/api';
 
@@ -38,11 +41,13 @@ const TargetAccountsPage = () => {
   const [accounts, setAccounts] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
   const [error, setError] = useState('');
   const [newAccount, setNewAccount] = useState({ account: '', pinnedTweetId: '' });
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteAllDialogOpen, setDeleteAllDialogOpen] = useState(false);
   const [accountToDelete, setAccountToDelete] = useState(null);
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     fetchAccounts();
@@ -154,6 +159,42 @@ const TargetAccountsPage = () => {
     }
   };
 
+  const handleCsvImport = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append('csvFile', file);
+
+    try {
+      setIsImporting(true);
+      setError('');
+
+      const { data } = await ApiService.config.importTargetAccountsFromCsv(formData);
+
+      if (data.success) {
+        setAccounts(data.targetAccounts);
+      } else {
+        setError(data.error || 'Failed to import target accounts from CSV');
+      }
+    } catch (error) {
+      console.error('Error importing target accounts from CSV:', error);
+      setError(error.response?.data?.error || 'Failed to import target accounts from CSV');
+    } finally {
+      setIsImporting(false);
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    }
+  };
+
+  const triggerFileInput = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
+    }
+  };
+
   if (isLoading && accounts.length === 0) {
     return (
       <Container sx={{ 
@@ -241,15 +282,44 @@ const TargetAccountsPage = () => {
             }}
           >
             <CardContent sx={{ p: 4 }}>
-              <Typography 
-                variant="h6" 
-                sx={{ 
-                  fontWeight: 600,
-                  mb: 2 
-                }}
-              >
-                Add Target Account
-              </Typography>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                <Typography 
+                  variant="h6" 
+                  sx={{ 
+                    fontWeight: 600,
+                  }}
+                >
+                  Add Target Account
+                </Typography>
+                
+                <Box>
+                  <Input 
+                    type="file"
+                    inputRef={fileInputRef}
+                    onChange={handleCsvImport}
+                    sx={{ display: 'none' }}
+                    inputProps={{ accept: '.csv' }}
+                  />
+                  <Tooltip title="Import accounts from CSV. Column A should contain usernames and Column B should contain Tweet IDs.">
+                    <Button
+                      variant="outlined"
+                      startIcon={isImporting ? <CircularProgress size={20} /> : <CloudUploadIcon />}
+                      onClick={triggerFileInput}
+                      disabled={isImporting}
+                      sx={{ 
+                        borderRadius: 2,
+                        ml: 2,
+                        transition: 'all 0.2s ease',
+                        '&:hover': {
+                          backgroundColor: 'rgba(0, 113, 227, 0.08)'
+                        }
+                      }}
+                    >
+                      Import CSV
+                    </Button>
+                  </Tooltip>
+                </Box>
+              </Box>
               
               <Typography 
                 variant="body1" 

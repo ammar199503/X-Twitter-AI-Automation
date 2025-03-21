@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import {
   Box,
@@ -36,6 +36,7 @@ import {
   DialogContent,
   DialogActions,
   DialogContentText,
+  AlertTitle,
 } from '@mui/material';
 import {
   Refresh as RefreshIcon,
@@ -53,6 +54,9 @@ import {
   Logout as LogoutIcon,
   Login as LoginIcon,
   CloudSync as CloudSyncIcon,
+  Dashboard as DashboardIcon,
+  ReportProblem as ReportProblemIcon,
+  HourglassTop as HourglassTopIcon,
 } from '@mui/icons-material';
 import ApiService from '../services/api';
 
@@ -61,6 +65,7 @@ const Dashboard = () => {
   const [status, setStatus] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  const [info, setInfo] = useState('');
   const [isStarting, setIsStarting] = useState(false);
   const [isStopping, setIsStopping] = useState(false);
   const [processedLinks, setProcessedLinks] = useState([]);
@@ -81,32 +86,11 @@ const Dashboard = () => {
   // State for confirm scraping dialog
   const [confirmScrapingOpen, setConfirmScrapingOpen] = useState(false);
 
-  useEffect(() => {
-    // Only set up status polling if auth check passes
-    const initDashboard = async () => {
-      const authOk = await checkAuth();
-      if (authOk) {
-        // Initial fetch
-        fetchStatus();
-        fetchLogs();
-        fetchProcessedLinks(); // Fetch processed links on initial load
-        
-        // Poll for status updates
-        const intervalId = setInterval(fetchStatus, 10000);
-        const logsIntervalId = setInterval(fetchLogs, 15000);
-        
-        // Cleanup on unmount
-        return () => {
-          clearInterval(intervalId);
-          clearInterval(logsIntervalId);
-        };
-      }
-    };
-    
-    initDashboard();
-  }, [logFilter, logSource]);
+  // Add a new state for stop confirmation
+  const [confirmStopOpen, setConfirmStopOpen] = useState(false);
 
-  const checkAuth = async () => {
+  // Define functions with useCallback to prevent dependency issues
+  const checkAuth = useCallback(async () => {
     try {
       const { data: authData } = await ApiService.auth.getStatus();
       
@@ -137,9 +121,9 @@ const Dashboard = () => {
       navigate('/login');
       return false;
     }
-  };
+  }, [navigate]);
 
-  const fetchStatus = async () => {
+  const fetchStatus = useCallback(async () => {
     try {
       setIsLoading(true);
       const { data } = await ApiService.getAppStatus();
@@ -184,9 +168,30 @@ const Dashboard = () => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
-  const fetchProcessedLinks = async () => {
+  // Fetch application logs
+  const fetchLogs = useCallback(async () => {
+    setIsLoadingLogs(true);
+    try {
+      // Apply filters if not set to 'all'
+      const level = logFilter !== 'all' ? logFilter : null;
+      const source = logSource !== 'all' ? logSource : null;
+      
+      const response = await ApiService.getLogs(50, level, source);
+      if (response.success) {
+        setLogs(response.logs);
+      } else {
+        console.error('Failed to load logs:', response.error);
+      }
+    } catch (error) {
+      console.error('Error fetching logs:', error);
+    } finally {
+      setIsLoadingLogs(false);
+    }
+  }, [logFilter, logSource]);
+
+  const fetchProcessedLinks = useCallback(async () => {
     try {
       setIsLoadingLinks(true);
       const { data } = await ApiService.scraper.getProcessedLinks();
@@ -201,7 +206,32 @@ const Dashboard = () => {
     } finally {
       setIsLoadingLinks(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    // Only set up status polling if auth check passes
+    const initDashboard = async () => {
+      const authOk = await checkAuth();
+      if (authOk) {
+        // Initial fetch
+        fetchStatus();
+        fetchLogs();
+        fetchProcessedLinks(); // Fetch processed links on initial load
+        
+        // Poll for status updates
+        const intervalId = setInterval(fetchStatus, 10000);
+        const logsIntervalId = setInterval(fetchLogs, 15000);
+        
+        // Cleanup on unmount
+        return () => {
+          clearInterval(intervalId);
+          clearInterval(logsIntervalId);
+        };
+      }
+    };
+    
+    initDashboard();
+  }, [checkAuth, fetchStatus, fetchLogs, fetchProcessedLinks]);
 
   // Function to verify required settings before scraping
   const verifyScrapingRequirements = () => {
@@ -250,12 +280,17 @@ const Dashboard = () => {
     }
   };
 
-  const handleStopScraping = async () => {
+  const handleStopScraping = async (immediate = true) => {
     try {
       setIsStopping(true);
-      const { data } = await ApiService.scraper.stop();
+      const { data } = await ApiService.scraper.stop(immediate);
       if (data.success) {
         fetchStatus();
+        // If graceful stop was requested, inform the user
+        if (!immediate) {
+          setError('');
+          setInfo('Scraper will complete the current cycle before stopping. This ensures any found relevant tweets will be posted.');
+        }
       } else {
         setError(data.error || 'Failed to stop scraping');
       }
@@ -264,27 +299,6 @@ const Dashboard = () => {
       setError(error.response?.data?.error || 'Failed to stop scraping');
     } finally {
       setIsStopping(false);
-    }
-  };
-
-  // Fetch application logs
-  const fetchLogs = async () => {
-    setIsLoadingLogs(true);
-    try {
-      // Apply filters if not set to 'all'
-      const level = logFilter !== 'all' ? logFilter : null;
-      const source = logSource !== 'all' ? logSource : null;
-      
-      const response = await ApiService.getLogs(50, level, source);
-      if (response.success) {
-        setLogs(response.logs);
-      } else {
-        console.error('Failed to load logs:', response.error);
-      }
-    } catch (error) {
-      console.error('Error fetching logs:', error);
-    } finally {
-      setIsLoadingLogs(false);
     }
   };
 
@@ -417,6 +431,24 @@ const Dashboard = () => {
     navigate('/login');
   };
 
+  // Add this function to check for authentication issues
+  const checkAuthenticationStatus = () => {
+    if (!status) return false;
+    
+    // Check if scraping is paused due to authentication issues
+    if (status.scraperStatus?.isPaused && 
+        status.scraperStatus?.pauseReason?.includes('authentication')) {
+      return true;
+    }
+    
+    // Check if Twitter is not logged in
+    if (status.twitterLoggedIn === false) {
+      return true;
+    }
+    
+    return false;
+  };
+
   if (isLoading && !status) {
     return (
       <Container sx={{ mt: 4, textAlign: 'center' }}>
@@ -440,6 +472,19 @@ const Dashboard = () => {
           }}
         >
           {error}
+        </Alert>
+      )}
+      
+      {info && (
+        <Alert 
+          severity="info" 
+          sx={{ 
+            mb: 4, 
+            borderRadius: 3,
+            boxShadow: '0 2px 10px rgba(0, 0, 0, 0.05)'
+          }}
+        >
+          {info}
         </Alert>
       )}
 
@@ -527,6 +572,26 @@ const Dashboard = () => {
           </IconButton>
         </Box>
       </Box>
+
+      {/* Authentication Alert - Add this block */}
+      {status && checkAuthenticationStatus() && (
+        <Alert 
+          severity="warning" 
+          sx={{ mb: 3 }}
+          action={
+            <Button 
+              color="inherit" 
+              size="small" 
+              onClick={() => navigate('/status')}
+            >
+              Fix Now
+            </Button>
+          }
+        >
+          <AlertTitle>Authentication Required</AlertTitle>
+          Twitter authentication is needed to continue scraping. Please visit the status page to reauthenticate.
+        </Alert>
+      )}
 
       <Grid container spacing={4}>
         {/* Status Card */}
@@ -683,7 +748,7 @@ const Dashboard = () => {
                         variant="contained"
                         color="error"
                         startIcon={isStopping ? <CircularProgress size={20} /> : <StopIcon />}
-                        onClick={handleStopScraping}
+                        onClick={() => setConfirmStopOpen(true)}
                         disabled={isStopping}
                         sx={{ py: 1.5 }}
                       >
@@ -1289,6 +1354,103 @@ const Dashboard = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Stop Scraping Confirmation Dialog */}
+      <Dialog
+        open={confirmStopOpen}
+        onClose={() => setConfirmStopOpen(false)}
+        aria-labelledby="stop-scraping-dialog-title"
+      >
+        <DialogTitle id="stop-scraping-dialog-title">
+          Stop Scraping Options
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Choose how you want to stop the scraper:
+          </DialogContentText>
+          <Box sx={{ mt: 3 }}>
+            <Grid container spacing={2}>
+              <Grid item xs={12}>
+                <Button
+                  variant="contained"
+                  color="error"
+                  fullWidth
+                  onClick={() => {
+                    handleStopScraping(true); // Immediate stop
+                    setConfirmStopOpen(false);
+                  }}
+                  startIcon={<StopIcon />}
+                >
+                  Stop Immediately
+                </Button>
+                <Typography variant="caption" display="block" sx={{ mt: 1 }}>
+                  Stops right away. Any tweets already identified but not yet posted will be discarded.
+                </Typography>
+              </Grid>
+              <Grid item xs={12}>
+                <Button
+                  variant="outlined"
+                  color="primary"
+                  fullWidth
+                  onClick={() => {
+                    handleStopScraping(false); // Graceful stop
+                    setConfirmStopOpen(false);
+                  }}
+                  startIcon={<HourglassTopIcon />}
+                >
+                  Graceful Stop
+                </Button>
+                <Typography variant="caption" display="block" sx={{ mt: 1 }}>
+                  Completes posting any tweets already processed by OpenAI before stopping.
+                </Typography>
+              </Grid>
+            </Grid>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmStopOpen(false)}>Cancel</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Configuration Links section - Find this section */}
+      <Grid container spacing={3} sx={{ mt: 3 }}>
+        <Grid item xs={12} sm={6} md={4}>
+          <Button
+            component={Link}
+            to="/target-accounts"
+            variant="outlined"
+            fullWidth
+            startIcon={<AccountIcon />}
+            sx={{ py: 2 }}
+          >
+            Target Accounts
+          </Button>
+        </Grid>
+        <Grid item xs={12} sm={6} md={4}>
+          <Button
+            component={Link}
+            to="/config"
+            variant="outlined"
+            fullWidth
+            startIcon={<SettingsIcon />}
+            sx={{ py: 2 }}
+          >
+            Scraper Settings
+          </Button>
+        </Grid>
+        <Grid item xs={12} sm={6} md={4}>
+          <Button
+            component={Link}
+            to="/openai-config"
+            variant="outlined"
+            fullWidth
+            startIcon={<CloudSyncIcon />}
+            sx={{ py: 2 }}
+          >
+            OpenAI Settings
+          </Button>
+        </Grid>
+      </Grid>
     </Container>
   );
 };

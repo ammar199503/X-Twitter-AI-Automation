@@ -112,4 +112,38 @@ router.post('/logout', async (req, res) => {
   }
 });
 
+/**
+ * @route POST /api/auth/handle-detection
+ * @desc Handle bot detection issues
+ * @access Public
+ */
+router.post('/handle-detection', async (req, res) => {
+  try {
+    logService.info('Attempting to handle bot detection', 'auth');
+    
+    // Call the Twitter service method to handle bot detection
+    const success = await twitterService.handleBotDetection();
+    
+    if (success) {
+      logService.info('Bot detection handling completed successfully', 'auth');
+      res.json({
+        success: true,
+        message: 'Bot detection handled. Please wait before trying to log in again.'
+      });
+    } else {
+      logService.warn('Bot detection handling completed with unknown result', 'auth');
+      res.json({
+        success: true,
+        message: 'Bot detection handling attempted. Please wait before trying to log in again.'
+      });
+    }
+  } catch (error) {
+    logService.error(`Error handling bot detection: ${error.message}`, 'auth');
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to handle bot detection'
+    });
+  }
+});
+
 export default router; 

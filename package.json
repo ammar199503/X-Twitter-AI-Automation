@@ -7,7 +7,9 @@
     "frontend": "cd frontend && npm start",
     "dev": "concurrently \"npm run backend\" \"npm run frontend\"",
     "postinstall": "cd backend && npm install && cd ../frontend && npm install",
-    "setup": "npm install && npm run postinstall"
+    "setup": "node setup.js",
+    "test-auth": "node test-auth.js",
+    "install-all": "npm install && cd backend && npm install && cd ../frontend && npm install"
   },
   "keywords": [
     "twitter",
@@ -20,7 +22,9 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "concurrently": "^8.2.2"
+    "agent-twitter-client": "^0.0.18",
+    "concurrently": "^8.2.2",
+    "express": "^4.19.1"
   },
   "engines": {
     "node": ">=14.0.0"

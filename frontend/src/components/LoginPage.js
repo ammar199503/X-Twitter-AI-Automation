@@ -21,6 +21,8 @@ import TwitterIcon from '@mui/icons-material/Twitter';
 import ApiService from '../services/api';
 import { Visibility, VisibilityOff } from '@mui/icons-material';
 import InfoIcon from '@mui/icons-material/Info';
+import ShieldIcon from '@mui/icons-material/Shield';
+import GppMaybeIcon from '@mui/icons-material/GppMaybe';
 
 const LoginPage = () => {
   const navigate = useNavigate();
@@ -38,6 +40,7 @@ const LoginPage = () => {
   const [nextPage, setNextPage] = useState('/dashboard');
   const [showPassword, setShowPassword] = useState(false);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [showBotDetectionInfo, setShowBotDetectionInfo] = useState(false);
 
   // Check login status on component mount
   useEffect(() => {
@@ -132,8 +135,11 @@ const LoginPage = () => {
       // Provide more helpful error messages
       if (error.response?.status === 401) {
         setError('X/Twitter rejected these credentials. Please check your username and password.');
-      } else if (error.response?.status === 403) {
-        setError('X/Twitter may require additional verification. Please try again later or log in to X/Twitter directly first.');
+      } else if (error.response?.status === 403 || 
+                 error.response?.data?.errorType === 'botDetection' || 
+                 (error.response?.data?.error && error.response?.data?.error.includes('bot detection'))) {
+        setError('X/Twitter bot detection triggered. Try using a different network or wait before retrying.');
+        setShowBotDetectionInfo(true);
       } else if (error.response?.status === 500) {
         setError('Server error during login. Please try again in a few moments.');
       } else {
@@ -538,6 +544,55 @@ const LoginPage = () => {
                 Login attempts: {loginAttempts}
               </Typography>
             )}
+
+            {/* Add Bot Detection Info Alert */}
+            {showBotDetectionInfo && (
+              <Alert 
+                severity="warning" 
+                icon={<GppMaybeIcon />}
+                sx={{ 
+                  mt: 2, 
+                  mb: 3,
+                  borderRadius: 2 
+                }}
+              >
+                <AlertTitle>Bot Detection Detected</AlertTitle>
+                <Typography variant="body2" gutterBottom>
+                  Twitter has detected automated access and is blocking login attempts. Try the following:
+                </Typography>
+                <ul style={{ paddingLeft: '20px', marginBottom: '8px' }}>
+                  <li>Wait 5-10 minutes before trying again</li>
+                  <li>Switch to a different network (e.g., from WiFi to mobile data)</li>
+                  <li>Log in to Twitter.com first in your browser</li>
+                  <li>Use a real Twitter account that regularly logs in</li>
+                </ul>
+                <Button 
+                  size="small" 
+                  variant="outlined" 
+                  endIcon={<InfoIcon />}
+                  onClick={() => window.open('./TWITTER_BOT_DETECTION.md', '_blank')}
+                  sx={{ mt: 1 }}
+                >
+                  Learn More
+                </Button>
+              </Alert>
+            )}
+
+            {/* Added note about bot detection protection */}
+            <Box sx={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center',
+              mt: 2,
+              p: 1.5, 
+              borderRadius: 2,
+              bgcolor: 'rgba(0, 113, 227, 0.08)',
+            }}>
+              <ShieldIcon sx={{ color: 'primary.main', mr: 1 }} />
+              <Typography variant="body2" color="text.secondary">
+                This application includes enhanced protection against Twitter bot detection.
+              </Typography>
+            </Box>
           </CardContent>
         </Card>
       </Container>

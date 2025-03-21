@@ -19,6 +19,8 @@ puppeteer.use(StealthPlugin());
 let isRunning = false;
 let scrapingInterval = null;
 let processedLinks = new Set();
+let isPaused = false; // Add a flag to track if scraping is paused for auth
+let pauseReason = ''; // Track the reason for pausing
 
 /**
  * Clean tweet URL to a standard format
@@ -140,11 +142,31 @@ export const startScraping = async () => {
   const config = configService.getConfig();
   
   isRunning = true;
+  isPaused = false;
+  pauseReason = '';
   logService.info("Starting scraping process", 'scraper');
   
   // Function to perform one scraping cycle
   const performScrapingCycle = async () => {
-    if (!isRunning) return;
+    if (!isRunning) {
+      logService.info("Scraping cycle skipped because scraper is stopped", 'scraper');
+      return;
+    }
+    
+    // Skip this cycle if we're paused for authentication
+    if (isPaused) {
+      logService.warn(`Scraping is paused: ${pauseReason}`, 'scraper');
+      return;
+    }
+    
+    // Check if we need to reauthenticate before proceeding
+    if (twitterService.needsAuthentication()) {
+      logService.error("Twitter authentication has expired, pausing scraping until re-login", 'scraper');
+      pauseScraping("Authentication required. Please re-login to Twitter.");
+      // Reset the authentication flag so we don't keep logging the same message
+      twitterService.resetAuthenticationState();
+      return;
+    }
     
     try {
       logService.info("Beginning scraping cycle", 'scraper');
@@ -166,45 +188,72 @@ export const startScraping = async () => {
         return;
       }
       
+      if (!isRunning) return; // Add early return if scraper was stopped
+      
       logService.info(`Processing batch of ${unprocessedTweets.length} unprocessed tweets`, 'scraper');
       
       try {
         // Process tweets in batch to find all relevant crypto news
         const rephrasedTweets = await openaiService.processTweetBatch(unprocessedTweets);
         
+        // Add another check after OpenAI processing
+        if (!isRunning) {
+          logService.info("Scraping was stopped during processing, aborting tweet posting", 'scraper');
+          return;
+        }
+        
+        // Track which tweets we should consider processed
+        const tweetsToProcess = new Set();
+        
         if (rephrasedTweets && rephrasedTweets.length > 0) {
           logService.info(`Found ${rephrasedTweets.length} relevant crypto news tweets`, 'scraper');
           
           // Post each rephrased tweet with configured delays
+          let successfulPostCount = 0;
           for (const tweet of rephrasedTweets) {
             if (!isRunning) break;
+            if (isPaused) break; // Don't proceed if we've been paused
             
             try {
               await twitterService.sendTweet(tweet);
               logService.info(`Posted crypto news tweet successfully: ${tweet.substring(0, 50)}...`, 'scraper');
+              successfulPostCount++;
               
               // Add delay between tweets
-              if (isRunning && rephrasedTweets.indexOf(tweet) < rephrasedTweets.length - 1) {
+              if (isRunning && !isPaused && rephrasedTweets.indexOf(tweet) < rephrasedTweets.length - 1) {
                 const { minDelay, maxDelay } = config.delays;
                 const delay = Math.floor(Math.random() * (maxDelay - minDelay + 1)) + minDelay;
                 logService.info(`Waiting ${delay/1000} seconds before next tweet...`, 'scraper');
                 await new Promise(resolve => setTimeout(resolve, delay));
               }
             } catch (tweetError) {
-              logService.error(`Error posting tweet: ${tweetError.message}`, 'scraper');
-              // Continue with next tweet even if one fails
+              // Check if this is an authentication error
+              if (tweetError.message && tweetError.message.includes("Authentication failed")) {
+                logService.error("Twitter authentication issue detected, pausing scraping", 'scraper');
+                pauseScraping("Authentication required. Please re-login to Twitter.");
+                // Don't mark tweets as processed - we'll retry after reauth
+                return;
+              } else {
+                logService.error(`Error posting tweet: ${tweetError.message}`, 'scraper');
+                // Don't mark any tweets as processed when a tweet posting fails
+                // We don't know which original tweet corresponds to this rephrased tweet
+                return; // Exit the function without marking any tweets as processed
+              }
             }
           }
           
-          // Mark all tweets as processed after successful posting
-          for (const tweet of unprocessedTweets) {
-            saveProcessedLink(tweet.url);
-            processedLinks.add(tweet.url);
+          // Only mark tweets as processed if ALL tweets were successfully posted
+          if (successfulPostCount === rephrasedTweets.length) {
+            // Since all tweets were posted successfully, we can mark all the original tweets as processed
+            for (const tweet of unprocessedTweets) {
+              saveProcessedLink(tweet.url);
+              processedLinks.add(tweet.url);
+            }
           }
         } else {
           logService.info("No relevant crypto news found in these tweets", 'scraper');
           
-          // Mark tweets as processed even if they weren't relevant
+          // If no tweets were selected for posting, we can safely mark them all as processed
           for (const tweet of unprocessedTweets) {
             saveProcessedLink(tweet.url);
             processedLinks.add(tweet.url);
@@ -212,11 +261,7 @@ export const startScraping = async () => {
         }
       } catch (batchError) {
         logService.error(`Error processing tweet batch: ${batchError.message}`, 'scraper');
-        // Mark tweets as processed even if there was an error
-        for (const tweet of unprocessedTweets) {
-          saveProcessedLink(tweet.url);
-          processedLinks.add(tweet.url);
-        }
+        // Do not mark tweets as processed if there was an error in batch processing
       }
       
       logService.info("Scraping cycle completed", 'scraper');
@@ -236,20 +281,87 @@ export const startScraping = async () => {
 };
 
 /**
- * Stop the scraping process
+ * Pause the scraping process
+ * @param {string} reason - Reason for pausing
+ * @returns {boolean} Whether pause was successful
  */
-export const stopScraping = () => {
+export const pauseScraping = (reason = "User requested pause") => {
+  if (!isRunning) {
+    logService.warn("No scraping in progress to pause", 'scraper');
+    return false;
+  }
+  
+  logService.info(`Pausing scraping process: ${reason}`, 'scraper');
+  isPaused = true;
+  pauseReason = reason;
+  
+  return true;
+};
+
+/**
+ * Resume the scraping process after a pause
+ * @returns {boolean} Whether resume was successful
+ */
+export const resumeScraping = async () => {
+  if (!isRunning) {
+    logService.warn("No scraping process to resume", 'scraper');
+    return false;
+  }
+  
+  if (!isPaused) {
+    logService.warn("Scraping is not paused", 'scraper');
+    return false;
+  }
+  
+  // Check if we're paused for auth reasons and verify we're logged in
+  if (pauseReason.includes("Authentication") && !twitterService.getLoginStatus()) {
+    logService.error("Cannot resume - still not logged in to Twitter", 'scraper');
+    return false;
+  }
+  
+  logService.info("Resuming scraping process", 'scraper');
+  isPaused = false;
+  pauseReason = '';
+  
+  return true;
+};
+
+/**
+ * Stop the scraping process
+ * @param {boolean} immediate - Whether to stop immediately (true) or finish the current cycle (false)
+ */
+export const stopScraping = (immediate = true) => {
   if (!isRunning) {
     logService.warn("No scraping in progress", 'scraper');
     return false;
   }
   
-  logService.info("Stopping scraping process", 'scraper');
-  isRunning = false;
+  if (immediate) {
+    logService.info("Stopping scraping process immediately", 'scraper');
+    isRunning = false;
+  } else {
+    logService.info("Scheduling scraping process to stop after current cycle completes", 'scraper');
+    // The current cycle will complete, but no new cycles will be scheduled
+    // We'll handle this in the interval
+  }
+  
+  isPaused = false;
+  pauseReason = '';
   
   if (scrapingInterval) {
     clearInterval(scrapingInterval);
     scrapingInterval = null;
+  }
+  
+  // If immediate stop was not requested, we'll let current cycle complete
+  if (!immediate) {
+    // Force isRunning to false after a reasonable timeout to ensure it eventually stops
+    setTimeout(() => {
+      if (isRunning) {
+        logService.info("Forcing scraper to stop after timeout", 'scraper');
+        isRunning = false;
+      }
+    }, 60000); // 1 minute grace period
   }
   
   return true;
@@ -261,6 +373,8 @@ export const stopScraping = () => {
 export const getStatus = () => {
   return {
     isRunning,
+    isPaused,
+    pauseReason,
     processedCount: processedLinks.size
   };
 }; 

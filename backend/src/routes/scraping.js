@@ -45,12 +45,13 @@ router.post('/start', async (req, res) => {
  */
 router.post('/stop', (req, res) => {
   try {
-    const success = scrapingService.stopScraping();
+    const { immediate = true } = req.body; // Default to immediate stop if not specified
+    const success = scrapingService.stopScraping(immediate);
     
     if (success) {
       res.json({
         success: true,
-        message: 'Scraping process stopped'
+        message: immediate ? 'Scraping process stopped immediately' : 'Scraping process will stop after current cycle'
       });
     } else {
       res.status(400).json({

@@ -1,8 +1,43 @@
 import express from 'express';
 import * as configService from '../services/configService.js';
 import * as openaiService from '../services/openaiService.js';
+import multer from 'multer';
+import fs from 'fs';
+import csv from 'csv-parser';
+import path from 'path';
 
 const router = express.Router();
+
+// Configure multer for file uploads
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadDir = path.join(process.cwd(), 'uploads');
+    // Create the directory if it doesn't exist
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    cb(null, `${Date.now()}-${file.originalname}`);
+  }
+});
+
+// Filter to accept only CSV files
+const fileFilter = (req, file, cb) => {
+  if (file.mimetype === 'text/csv' || 
+      file.originalname.toLowerCase().endsWith('.csv')) {
+    cb(null, true);
+  } else {
+    cb(new Error('Only CSV files are allowed'), false);
+  }
+};
+
+const upload = multer({ 
+  storage, 
+  fileFilter,
+  limits: { fileSize: 1024 * 1024 * 5 } // 5MB max file size
+});
 
 /**
  * @route GET /api/config
@@ -430,6 +465,106 @@ router.put('/openai', async (req, res) => {
     res.status(500).json({
       success: false,
       error: error.message || 'Error updating OpenAI configuration'
+    });
+  }
+});
+
+/**
+ * @route POST /api/config/target-accounts/import-csv
+ * @desc Import target accounts from CSV file
+ * @access Public
+ */
+router.post('/target-accounts/import-csv', upload.single('csvFile'), (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        error: 'No CSV file uploaded'
+      });
+    }
+
+    const results = [];
+    const filePath = req.file.path;
+
+    fs.createReadStream(filePath)
+      .pipe(csv())
+      .on('data', (data) => {
+        // Process each row from the CSV
+        const keys = Object.keys(data);
+        if (keys.length >= 2) {
+          // Get the values from the first and second columns
+          // Column names don't matter, just the positions
+          const username = data[keys[0]];
+          let tweetId = data[keys[1]];
+          
+          // Skip empty rows
+          if (!username) return;
+          
+          // Clean up the username (remove @ if present)
+          const cleanUsername = username.trim().replace(/^@/, '');
+          
+          // Clean up the tweet ID (remove leading quote if present)
+          if (tweetId) {
+            tweetId = tweetId.trim().replace(/^'/, '');
+          }
+          
+          // Add the account with optional tweet ID
+          if (tweetId) {
+            results.push({ account: cleanUsername, pinnedTweetId: tweetId });
+          } else {
+            results.push({ account: cleanUsername });
+          }
+        }
+      })
+      .on('end', () => {
+        // Get current config
+        const config = configService.getConfig();
+        
+        // Create a map of existing accounts for easy lookup
+        const existingAccountsMap = {};
+        config.targetAccounts.forEach(acc => {
+          if (typeof acc === 'string') {
+            existingAccountsMap[acc] = true;
+          } else {
+            existingAccountsMap[acc.account] = true;
+          }
+        });
+        
+        // Filter out accounts that already exist
+        const newAccounts = results.filter(acc => !existingAccountsMap[acc.account]);
+        
+        // Add new accounts to the existing ones
+        const updatedAccounts = [...config.targetAccounts, ...newAccounts];
+        const updatedConfig = configService.updateTargetAccounts(updatedAccounts);
+        
+        // Clean up the temporary file
+        fs.unlink(filePath, (err) => {
+          if (err) console.error('Error deleting temporary file:', err);
+        });
+        
+        res.json({
+          success: true,
+          targetAccounts: updatedConfig.targetAccounts,
+          imported: newAccounts.length
+        });
+      })
+      .on('error', (error) => {
+        console.error('Error parsing CSV:', error);
+        // Clean up the temporary file
+        fs.unlink(filePath, (err) => {
+          if (err) console.error('Error deleting temporary file:', err);
+        });
+        
+        res.status(500).json({
+          success: false,
+          error: 'Error parsing CSV file'
+        });
+      });
+  } catch (error) {
+    console.error('Error importing target accounts from CSV:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Error importing target accounts from CSV'
     });
   }
 });
