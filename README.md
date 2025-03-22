@@ -156,9 +156,9 @@ Automatically collect tweets on your target accounts, process them with AI, and 
 
 ![Login Page](screenshots/Login-Page.png)
 ![Dashboard](screenshots/dashborad.png)
-![Target Accounts](screenshots/Target-account-settings.png)
-![Settings](screenshots/Scrapper-and-delay-settings.png)
-![API Configuration](screenshots/API-Settings.png)
+![Target Accounts](screenshots/Target-Acc-settings.png)
+![Settings](screenshots/Scraper-and-Delay-settings.png)
+![API Configuration](screenshots/AI-API-Settings.png)
 
 ## Need Help?
 If you have questions, please contact us via GitHub issues.
