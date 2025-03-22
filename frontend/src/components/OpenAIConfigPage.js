@@ -420,18 +420,38 @@ Remember: Select ALL relevant crypto/financial news, ignore giveaways or non-new
           <Box mb={2}>
             <Paper 
               variant="outlined" 
-              sx={{ p: 2, mb: 2, cursor: 'pointer', '&:hover': { boxShadow: '0 4px 8px rgba(0,0,0,0.1)' }, bgcolor: '#f9f9ff' }}
+              sx={{ 
+                p: 2, 
+                mb: 2, 
+                cursor: 'pointer', 
+                '&:hover': { 
+                  boxShadow: '0 4px 12px rgba(93, 63, 211, 0.3)',
+                  transform: 'translateY(-2px)'
+                }, 
+                bgcolor: 'rgba(93, 63, 211, 0.25)', 
+                borderColor: 'rgba(93, 63, 211, 0.5)' 
+              }}
               onClick={() => setSystemPrompt(backendDefaults.systemPrompt.replace(`\n${REQUIRED_SEPARATOR}`, ''))}
             >
-              <Typography variant="subtitle1" fontWeight="500">Default (Crypto News)</Typography>
-              <Typography variant="body2" color="text.secondary">
+              <Typography variant="subtitle1" fontWeight="500" color="#4DA3FF">Default (Crypto News)</Typography>
+              <Typography variant="body2" color="rgba(255, 255, 255, 0.9)">
                 Restore the default crypto news guidelines for rephrasing tweets.
               </Typography>
             </Paper>
             
             <Paper 
               variant="outlined" 
-              sx={{ p: 2, mb: 2, cursor: 'pointer', '&:hover': { boxShadow: '0 4px 8px rgba(0,0,0,0.1)' } }}
+              sx={{ 
+                p: 2, 
+                mb: 2, 
+                cursor: 'pointer', 
+                '&:hover': { 
+                  boxShadow: '0 4px 12px rgba(93, 63, 211, 0.3)',
+                  transform: 'translateY(-2px)'
+                }, 
+                bgcolor: 'rgba(0, 194, 255, 0.15)',
+                borderColor: 'rgba(0, 194, 255, 0.4)'
+              }}
               onClick={() => setSystemPrompt(`You are a tech news curator who identifies and rephrases tech-related information from tweets.
 
 GUIDELINES:
@@ -445,15 +465,25 @@ GUIDELINES:
 - Provide context about the significance of tech developments
 - If no tech news is found, clearly state this`)}
             >
-              <Typography variant="subtitle1" fontWeight="500">Tech News Reporter</Typography>
-              <Typography variant="body2" color="text.secondary">
+              <Typography variant="subtitle1" fontWeight="500" color="#00c2ff">Tech News Reporter</Typography>
+              <Typography variant="body2" color="rgba(255, 255, 255, 0.9)">
                 A tech-focused reporter who shares technology news, updates, and industry developments.
               </Typography>
             </Paper>
             
             <Paper 
               variant="outlined" 
-              sx={{ p: 2, mb: 2, cursor: 'pointer', '&:hover': { boxShadow: '0 4px 8px rgba(0,0,0,0.1)' } }}
+              sx={{ 
+                p: 2, 
+                mb: 2, 
+                cursor: 'pointer', 
+                '&:hover': { 
+                  boxShadow: '0 4px 12px rgba(93, 63, 211, 0.3)',
+                  transform: 'translateY(-2px)'
+                }, 
+                bgcolor: 'rgba(0, 208, 132, 0.15)',
+                borderColor: 'rgba(0, 208, 132, 0.4)'
+              }}
               onClick={() => setSystemPrompt(`You are a sports content specialist who identifies and rephrases sports news from tweets.
 
 GUIDELINES:
@@ -467,15 +497,24 @@ GUIDELINES:
 - For transfer news, mention both teams involved
 - If no sports news is found, clearly state this`)}
             >
-              <Typography variant="subtitle1" fontWeight="500">Sports News Reporter</Typography>
-              <Typography variant="body2" color="text.secondary">
+              <Typography variant="subtitle1" fontWeight="500" color="#00D084">Sports News Reporter</Typography>
+              <Typography variant="body2" color="rgba(255, 255, 255, 0.9)">
                 A sports specialist who shares game results, player news, and team updates.
               </Typography>
             </Paper>
             
             <Paper 
               variant="outlined" 
-              sx={{ p: 2, cursor: 'pointer', '&:hover': { boxShadow: '0 4px 8px rgba(0,0,0,0.1)' } }}
+              sx={{ 
+                p: 2, 
+                cursor: 'pointer', 
+                '&:hover': { 
+                  boxShadow: '0 4px 12px rgba(93, 63, 211, 0.3)',
+                  transform: 'translateY(-2px)'
+                }, 
+                bgcolor: 'rgba(255, 87, 87, 0.15)',
+                borderColor: 'rgba(255, 87, 87, 0.4)'
+              }}
               onClick={() => setSystemPrompt(`You are an entertainment news specialist who rephrases celebrity and entertainment news from tweets.
 
 GUIDELINES:
@@ -489,8 +528,8 @@ GUIDELINES:
 - Respect privacy while still reporting newsworthy information
 - If no entertainment news is found, clearly state this`)}
             >
-              <Typography variant="subtitle1" fontWeight="500">Entertainment Reporter</Typography>
-              <Typography variant="body2" color="text.secondary">
+              <Typography variant="subtitle1" fontWeight="500" color="#FF7A7A">Entertainment Reporter</Typography>
+              <Typography variant="body2" color="rgba(255, 255, 255, 0.9)">
                 An entertainment specialist who covers celebrity news, movies, TV, and music.
               </Typography>
             </Paper>
@@ -508,50 +547,89 @@ GUIDELINES:
           <Box mb={2}>
             <Paper 
               variant="outlined" 
-              sx={{ p: 2, mb: 2, cursor: 'pointer', '&:hover': { boxShadow: '0 4px 8px rgba(0,0,0,0.1)' }, bgcolor: '#f9f9ff' }}
+              sx={{ 
+                p: 2, 
+                mb: 2, 
+                cursor: 'pointer', 
+                '&:hover': { 
+                  boxShadow: '0 4px 12px rgba(93, 63, 211, 0.3)',
+                  transform: 'translateY(-2px)'
+                }, 
+                bgcolor: 'rgba(93, 63, 211, 0.25)', 
+                borderColor: 'rgba(93, 63, 211, 0.5)' 
+              }}
               onClick={() => setUserPromptTemplate(backendDefaults.userPromptTemplate.replace(REQUIRED_TWEETS_PLACEHOLDER, ''))}
             >
-              <Typography variant="subtitle1" fontWeight="500">Default (Crypto News)</Typography>
-              <Typography variant="body2" color="text.secondary">
+              <Typography variant="subtitle1" fontWeight="500" color="#4DA3FF">Default (Crypto News)</Typography>
+              <Typography variant="body2" color="rgba(255, 255, 255, 0.9)">
                 Restore the default crypto news template for rephrasing tweets.
               </Typography>
             </Paper>
             
             <Paper 
               variant="outlined" 
-              sx={{ p: 2, mb: 2, cursor: 'pointer', '&:hover': { boxShadow: '0 4px 8px rgba(0,0,0,0.1)' } }}
+              sx={{ 
+                p: 2, 
+                mb: 2, 
+                cursor: 'pointer', 
+                '&:hover': { 
+                  boxShadow: '0 4px 12px rgba(93, 63, 211, 0.3)',
+                  transform: 'translateY(-2px)'
+                }, 
+                bgcolor: 'rgba(0, 194, 255, 0.15)',
+                borderColor: 'rgba(0, 194, 255, 0.4)'
+              }}
               onClick={() => setUserPromptTemplate(`As a tech news curator, review these tweets and extract ALL relevant technology information:
 
 Remember: Focus on product launches, software updates, tech industry news, and innovations. Keep each tweet under 280 characters and be accurate with technical details.`)}
             >
-              <Typography variant="subtitle1" fontWeight="500">Tech News Template</Typography>
-              <Typography variant="body2" color="text.secondary">
+              <Typography variant="subtitle1" fontWeight="500" color="#00c2ff">Tech News Template</Typography>
+              <Typography variant="body2" color="rgba(255, 255, 255, 0.9)">
                 A template for reporting on technology news and developments.
               </Typography>
             </Paper>
             
             <Paper 
               variant="outlined" 
-              sx={{ p: 2, mb: 2, cursor: 'pointer', '&:hover': { boxShadow: '0 4px 8px rgba(0,0,0,0.1)' } }}
+              sx={{ 
+                p: 2, 
+                mb: 2, 
+                cursor: 'pointer', 
+                '&:hover': { 
+                  boxShadow: '0 4px 12px rgba(93, 63, 211, 0.3)',
+                  transform: 'translateY(-2px)'
+                }, 
+                bgcolor: 'rgba(0, 208, 132, 0.15)',
+                borderColor: 'rgba(0, 208, 132, 0.4)'
+              }}
               onClick={() => setUserPromptTemplate(`As a sports reporter, review these tweets and extract ALL relevant sports information:
 
 Remember: Focus on game results, player news, team updates, and sporting events. Keep each tweet under 280 characters and include key statistics when relevant.`)}
             >
-              <Typography variant="subtitle1" fontWeight="500">Sports Updates Template</Typography>
-              <Typography variant="body2" color="text.secondary">
+              <Typography variant="subtitle1" fontWeight="500" color="#00D084">Sports Updates Template</Typography>
+              <Typography variant="body2" color="rgba(255, 255, 255, 0.9)">
                 A template focused on sports news, results, and updates.
               </Typography>
             </Paper>
             
             <Paper 
               variant="outlined" 
-              sx={{ p: 2, cursor: 'pointer', '&:hover': { boxShadow: '0 4px 8px rgba(0,0,0,0.1)' } }}
+              sx={{ 
+                p: 2, 
+                cursor: 'pointer', 
+                '&:hover': { 
+                  boxShadow: '0 4px 12px rgba(93, 63, 211, 0.3)',
+                  transform: 'translateY(-2px)'
+                }, 
+                bgcolor: 'rgba(255, 87, 87, 0.15)',
+                borderColor: 'rgba(255, 87, 87, 0.4)'
+              }}
               onClick={() => setUserPromptTemplate(`As an entertainment news reporter, review these tweets and extract ALL relevant entertainment information:
 
 Remember: Focus on movies, TV shows, music releases, and celebrity news. Keep each tweet under 280 characters and maintain respectful reporting on public figures.`)}
             >
-              <Typography variant="subtitle1" fontWeight="500">Entertainment News Template</Typography>
-              <Typography variant="body2" color="text.secondary">
+              <Typography variant="subtitle1" fontWeight="500" color="#FF7A7A">Entertainment News Template</Typography>
+              <Typography variant="body2" color="rgba(255, 255, 255, 0.9)">
                 A template for entertainment and celebrity news updates.
               </Typography>
             </Paper>
@@ -564,36 +642,59 @@ Remember: Focus on movies, TV shows, music releases, and celebrity news. Keep ea
           variant="outlined"
           startIcon={<ArrowBackIcon />}
           onClick={() => navigate('/config')}
+          sx={{
+            borderRadius: 2,
+            py: 1.2,
+            px: 2.5,
+            color: '#9C7FFF',
+            borderColor: 'rgba(156, 127, 255, 0.5)',
+            '&:hover': {
+              borderColor: '#9C7FFF',
+              backgroundColor: 'rgba(156, 127, 255, 0.05)'
+            }
+          }}
         >
           Back to Scraper Settings
         </Button>
+
+        {success && (
+          <Alert 
+            severity="success" 
+            sx={{ 
+              position: 'absolute',
+              top: '80px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              zIndex: 10,
+              boxShadow: '0 4px 20px rgba(0, 0, 0, 0.15)',
+              borderRadius: 2,
+              animation: 'fadeIn 0.3s ease-out'
+            }}
+          >
+            {success}
+          </Alert>
+        )}
         
-        <Box display="flex" alignItems="center" gap={2}>
+        <Box display="flex" gap={2}>
           {success && (
-            <>
-              <Alert severity="success" sx={{ mr: 2 }}>
-                {success}
-              </Alert>
-              
-              <Button
-                variant="contained"
-                color="primary"
-                onClick={() => navigate('/dashboard')}
-                sx={{
-                  borderRadius: 2,
-                  py: 1,
-                  px: 2,
-                  fontWeight: 500,
-                  boxShadow: '0 2px 10px rgba(0, 113, 227, 0.2)',
-                  '&:hover': {
-                    boxShadow: '0 4px 15px rgba(0, 113, 227, 0.3)',
-                    transform: 'translateY(-2px)'
-                  }
-                }}
-              >
-                Go to Dashboard
-              </Button>
-            </>
+            <Button
+              variant="contained"
+              color="primary"
+              onClick={() => navigate('/dashboard')}
+              sx={{
+                borderRadius: 2,
+                py: 1.2,
+                px: 3,
+                fontWeight: 500,
+                boxShadow: '0 2px 10px rgba(0, 113, 227, 0.2)',
+                '&:hover': {
+                  boxShadow: '0 4px 15px rgba(0, 113, 227, 0.3)',
+                  transform: 'translateY(-2px)'
+                }
+              }}
+            >
+              Go to Dashboard
+            </Button>
           )}
           
           <Button
@@ -602,6 +703,17 @@ Remember: Focus on movies, TV shows, music releases, and celebrity news. Keep ea
             startIcon={<SaveIcon />}
             onClick={handleSave}
             disabled={isLoading || isSaving}
+            sx={{
+              borderRadius: 2,
+              py: 1.2,
+              px: 3,
+              fontWeight: 500,
+              boxShadow: '0 2px 10px rgba(0, 113, 227, 0.2)',
+              '&:hover': {
+                boxShadow: '0 4px 15px rgba(0, 113, 227, 0.3)',
+                transform: 'translateY(-2px)'
+              }
+            }}
           >
             {isSaving ? 'Saving...' : 'Save Configuration'}
           </Button>

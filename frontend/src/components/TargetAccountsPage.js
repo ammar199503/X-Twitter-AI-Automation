@@ -676,7 +676,7 @@ const TargetAccountsPage = () => {
                                   mr: 1
                                 }}
                               >
-                                @{account.account}
+                                @{typeof account === 'string' ? account : account.account}
                               </Typography>
                             </Box>
                           }

@@ -1,4 +1,4 @@
-/* Global styles for Apple-inspired design */
+/* Global styles for modern vibrant design */
 * {
   box-sizing: border-box;
   margin: 0;
@@ -9,31 +9,96 @@ html {
   scroll-behavior: smooth;
 }
 
+/* Font optimization for better text rendering */
+@media screen and (-webkit-min-device-pixel-ratio:0) {
+  * {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+}
+
+/* Base body styles */
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue',
-    Arial, sans-serif;
+  font-family: 'Inter', 'Roboto Flex', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overflow-x: hidden;
-  color: #1d1d1f;
-  background-color: #f5f5f7;
-  transition: background-color 0.3s ease;
+  transition: color 0.3s ease, background-color 0.3s ease;
+  font-weight: 400;
+  line-height: 1.6;
+  letter-spacing: 0.01em;
+  color: #FFFFFF;
+  background-color: #121218;
+  color-scheme: dark;
 }
 
 code {
-  font-family: 'SF Mono', source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
-    monospace;
+  font-family: 'Fira Code', 'JetBrains Mono', 'SF Mono', monospace;
+  font-weight: 500;
 }
 
 /* Add fluid transitions for interactive elements */
 a, button, input, select, textarea {
-  transition: all 0.2s ease-in-out;
+  transition: all 0.3s ease;
 }
 
-/* Prevent text selection on interactive elements for a cleaner experience */
-button, a {
-  user-select: none;
+/* Improve text readability */
+p {
+  margin-bottom: 1em;
+  max-width: 70ch; /* Optimal reading width */
+}
+
+/* Card and Paper - ensure text is visible */
+.MuiPaper-root h1, 
+.MuiPaper-root h2, 
+.MuiPaper-root h3, 
+.MuiPaper-root h4, 
+.MuiPaper-root h5, 
+.MuiPaper-root h6,
+.MuiPaper-root .MuiTypography-root {
+  color: #FFFFFF !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+/* Specific styling for headings */
+.MuiPaper-root .MuiTypography-h4,
+.MuiPaper-root .MuiTypography-h5 {
+  color: #4DA3FF !important;
+  font-weight: 700;
+}
+
+/* Secondary text in cards with better contrast */
+.MuiPaper-root .MuiTypography-body1,
+.MuiPaper-root .MuiTypography-body2 {
+  color: rgba(255, 255, 255, 0.87) !important;
+}
+
+/* Security notice text */
+.MuiPaper-root .MuiAlert-root .MuiTypography-root {
+  color: #4AEDC4 !important;
+  font-weight: 500;
+}
+
+/* General heading contrast */
+.MuiTypography-h1, .MuiTypography-h2, .MuiTypography-h3, 
+.MuiTypography-h4, .MuiTypography-h5, .MuiTypography-h6 {
+  color: #FFFFFF;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+
+/* AppBar specific styles */
+.MuiAppBar-root {
+  position: relative;
+  z-index: 1100;
+}
+
+.MuiAppBar-root .MuiTypography-h6 {
+  font-weight: 600;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  color: #FFFFFF !important;
 }
 
 /* Custom scrollbar for webkit browsers */
@@ -43,24 +108,24 @@ button, a {
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(0, 0, 0, 0.05);
-  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.15);
-  border-radius: 4px;
+  background: linear-gradient(45deg, rgba(93, 63, 211, 0.8), rgba(255, 87, 87, 0.8));
+  border-radius: 8px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 0, 0, 0.25);
+  background: linear-gradient(45deg, rgba(93, 63, 211, 1), rgba(255, 87, 87, 1));
 }
 
 /* Animation keyframes for page transitions */
 @keyframes fadeIn {
   from {
     opacity: 0;
-    transform: translateY(10px);
+    transform: translateY(20px);
   }
   to {
     opacity: 1;
@@ -70,5 +135,155 @@ button, a {
 
 /* Apply fade-in animation to main content */
 .MuiContainer-root {
-  animation: fadeIn 0.3s ease-out;
+  animation: fadeIn 0.4s ease-out;
+}
+
+/* Improve form field contrast - Ensure white text */
+.MuiInputBase-root .MuiInputBase-input,
+.MuiOutlinedInput-root .MuiOutlinedInput-input {
+  color: #FFFFFF !important;
+}
+
+.MuiInputBase-root .MuiInputBase-input::placeholder,
+.MuiOutlinedInput-root .MuiOutlinedInput-input::placeholder {
+  color: rgba(255, 255, 255, 0.7) !important;
+  opacity: 1;
+}
+
+.MuiInputLabel-root {
+  color: #FFFFFF !important;
+  font-weight: 500;
+  opacity: 0.9;
+}
+
+.MuiFormLabel-root,
+.MuiCheckbox-root + .MuiFormControlLabel-label {
+  color: #FFFFFF !important;
+}
+
+/* Terms of Service links */
+a.MuiLink-root {
+  color: #4DA3FF !important;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+a.MuiLink-root:hover {
+  text-decoration: underline;
+}
+
+/* Form controls improved for visibility */
+.MuiFormControl-root .MuiInputBase-root {
+  background-color: rgba(0, 0, 0, 0.15);
+  border-radius: 12px;
+}
+
+.MuiFormControl-root .MuiInputBase-root.Mui-focused {
+  background-color: rgba(0, 0, 0, 0.25);
+  box-shadow: 0 0 0 2px rgba(93, 63, 211, 0.5);
+}
+
+/* Add subtle glow effect to primary buttons */
+.MuiButton-containedPrimary {
+  position: relative;
+  overflow: hidden;
+}
+
+.MuiButton-containedPrimary::after {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0) 70%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.MuiButton-containedPrimary:hover::after {
+  opacity: 1;
+}
+
+/* Table styling for better visibility */
+.MuiTableCell-root {
+  color: #FFFFFF !important;
+  border-bottom-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+.MuiTableCell-head {
+  font-weight: 600 !important;
+  background-color: rgba(0, 0, 0, 0.2) !important;
+}
+
+.MuiTableRow-root:hover {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+}
+
+/* ListItem styling for better visibility */
+.MuiListItem-root {
+  color: #FFFFFF !important;
+}
+
+.MuiListItemText-primary {
+  color: #FFFFFF !important;
+}
+
+.MuiListItemText-secondary {
+  color: rgba(255, 255, 255, 0.7) !important;
+}
+
+/* Chip styling for better visibility */
+.MuiChip-root {
+  background-color: rgba(255, 255, 255, 0.1) !important;
+  color: #FFFFFF !important;
+}
+
+/* Make sure dialog content is visible */
+.MuiDialogContent-root {
+  color: #FFFFFF !important;
+}
+
+.MuiDialogContentText-root {
+  color: rgba(255, 255, 255, 0.8) !important;
+}
+
+/* Select dropdown styling */
+.MuiSelect-select {
+  color: #FFFFFF !important;
+}
+
+.MuiMenuItem-root {
+  color: #FFFFFF !important;
+}
+
+/* Add modern text selection style */
+::selection {
+  background-color: rgba(93, 63, 211, 0.3);
+  color: #FFFFFF;
+}
+
+/* Add smooth mode transition to all elements */
+*, *::before, *::after {
+  transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease,
+              fill 0.3s ease, stroke 0.3s ease, box-shadow 0.3s ease;
+}
+
+/* Add responsive typography scaling */
+@media (max-width: 600px) {
+  h1, .MuiTypography-h1 {
+    font-size: 2.5rem !important;
+  }
+  
+  h2, .MuiTypography-h2 {
+    font-size: 2rem !important;
+  }
+  
+  h3, .MuiTypography-h3 {
+    font-size: 1.75rem !important;
+  }
+  
+  h4, .MuiTypography-h4 {
+    font-size: 1.5rem !important;
+  }
 }
