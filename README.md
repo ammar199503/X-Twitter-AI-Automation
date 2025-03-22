@@ -3,7 +3,7 @@
 Best simple and easy to use Twitter AI Automation tool.
 Automatically collect tweets on your target accounts, process them with AI, and post them to your Twitter account.
 
-![Dashboard](screenshots/dashboard.png)
+![Dashboard](screenshots/dashborad.png)
 
 ## Features
 
@@ -154,13 +154,11 @@ Automatically collect tweets on your target accounts, process them with AI, and 
 
 ## Screenshots
 
-![Dashboard](screenshots/dashboard.png)
+![Login Page](screenshots/Login-Page.png)
+![Dashboard](screenshots/dashborad.png)
 ![Target Accounts](screenshots/Target-account-settings.png)
 ![Settings](screenshots/Scrapper-and-delay-settings.png)
 ![API Configuration](screenshots/API-Settings.png)
-
-## Video Guide
-A video guide (Guide.mov) is available in the screenshots folder of your local installation. This file is not included in the GitHub repository due to size constraints.
 
 ## Need Help?
 If you have questions, please contact us via GitHub issues.
