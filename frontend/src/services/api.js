@@ -93,6 +93,22 @@ const ApiService = {
         console.error('Error clearing processed links:', error);
         throw error;
       }
+    },
+    getFailedBatchInfo: async () => {
+      try {
+        return await API.get('/scrape/failed-batch-info');
+      } catch (error) {
+        console.error('Error getting failed batch info:', error);
+        throw error;
+      }
+    },
+    retryFailedBatch: async () => {
+      try {
+        return await API.post('/scrape/retry-failed-batch');
+      } catch (error) {
+        console.error('Error retrying failed batch:', error);
+        throw error;
+      }
     }
   },
   
@@ -223,68 +239,82 @@ const ApiService = {
       // Get scraper status - contains most of the application state
       const scraperResponse = await API.get('/scrape/status').catch(error => {
         console.error("Error fetching scraper status:", error);
-        return { data: {} };
+        return { data: { success: false } };
       });
       
       // Get auth status - contains login information
       const authResponse = await API.get('/auth/status').catch(error => {
         console.error("Error fetching auth status:", error);
-        return { data: { isLoggedIn: false } };
+        return { data: { success: false, isLoggedIn: false } };
       });
       
       // Get config information
       const configResponse = await API.get('/config').catch(error => {
         console.error("Error fetching config:", error);
-        return { data: { config: {} } };
+        return { data: { success: false, config: {} } };
       });
       
+      // Fetch OpenAI config specifically to check if API key is configured
+      const openAIResponse = await API.get('/config/openai').catch(error => {
+        console.error("Error fetching OpenAI config:", error);
+        return { data: { success: false, isConfigured: false, openai: {} } };
+      });
+      
+      // Determine if OpenAI is configured using the explicit isConfigured field
+      const openAIConfigured = openAIResponse.data?.isConfigured === true;
+      
       // Combine all data into a compatible format expected by the dashboard
-      const combinedResponse = {
-        data: {
-          success: true,
-          status: {
-            // Core status fields
+      return {
+        success: true,
+        status: {
+          // Core status fields
+          isRunning: scraperResponse.data?.isRunning || false,
+          isPaused: scraperResponse.data?.isPaused || false,
+          pauseReason: scraperResponse.data?.pauseReason || null,
+          
+          // Next cycle time for the countdown
+          nextCycleTime: scraperResponse.data?.nextCycleTime || null,
+          cycleDelay: scraperResponse.data?.cycleDelay || 1800000, // Default to 30 minutes
+          
+          // Authentication status
+          isLoggedIn: authResponse.data?.isLoggedIn || false,
+          username: authResponse.data?.username || null,
+          twitterLoggedIn: authResponse.data?.isLoggedIn || false,
+          
+          // OpenAI status
+          openAIConfigured: openAIConfigured,
+          
+          // Scraper info
+          scraperStatus: {
             isRunning: scraperResponse.data?.isRunning || false,
             isPaused: scraperResponse.data?.isPaused || false,
             pauseReason: scraperResponse.data?.pauseReason || null,
-            
-            // Authentication status
-            isLoggedIn: authResponse.data?.isLoggedIn || false,
-            username: authResponse.data?.username || null,
-            twitterLoggedIn: authResponse.data?.isLoggedIn || false,
-            
-            // Scraper info
-            scraperStatus: {
-              isRunning: scraperResponse.data?.isRunning || false,
-              isPaused: scraperResponse.data?.isPaused || false,
-              pauseReason: scraperResponse.data?.pauseReason || null,
-              processedLinksCount: scraperResponse.data?.processedLinksCount || 0
-            },
-            
-            // Config data
-            targetAccounts: configResponse.data?.config?.targetAccounts || [],
-            delays: {
-              min: configResponse.data?.config?.delays?.minDelay || 30000,
-              max: configResponse.data?.config?.delays?.maxDelay || 60000,
-              minDelay: configResponse.data?.config?.delays?.minDelay || 30000,
-              maxDelay: configResponse.data?.config?.delays?.maxDelay || 60000
-            },
-            tweetsPerAccount: configResponse.data?.config?.tweetsPerAccount || 3
-          }
+            processedLinksCount: scraperResponse.data?.processedLinksCount || 0
+          },
+          
+          // Config data
+          targetAccounts: configResponse.data?.config?.targetAccounts || [],
+          delays: {
+            min: configResponse.data?.config?.delays?.minDelay || 30000,
+            max: configResponse.data?.config?.delays?.maxDelay || 60000,
+            minDelay: configResponse.data?.config?.delays?.minDelay || 30000,
+            maxDelay: configResponse.data?.config?.delays?.maxDelay || 60000
+          },
+          tweetsPerAccount: configResponse.data?.config?.tweetsPerAccount || 3
         }
       };
-      
-      console.log("App status response (combined):", combinedResponse.data);
-      return combinedResponse;
     } catch (error) {
-      console.error("Error fetching app status:", error);
-      // Return a structured error response instead of throwing
-      return { 
-        data: { 
-          success: false, 
-          error: error.message,
-          status: { targetAccounts: [] } // Empty target accounts to trigger redirect
-        } 
+      console.error("Error in getAppStatus:", error);
+      return {
+        success: false,
+        error: error.message,
+        status: {
+          isRunning: false,
+          isPaused: false,
+          openAIConfigured: false,
+          isLoggedIn: false,
+          twitterLoggedIn: false
+        }
       };
     }
   },

@@ -1,8 +1,7 @@
 import express from 'express';
 import * as scrapingService from '../services/scrapingService.js';
-import { clearProcessedLinks, loadProcessedLinks } from '../utils/fileUtils.js';
+import { clearProcessedLinks } from '../utils/fileUtils.js';
 import * as logService from '../services/logService.js';
-import * as configService from '../services/configService.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -18,26 +17,15 @@ const __dirname = path.dirname(__filename);
 router.get('/status', (req, res) => {
   try {
     const status = scrapingService.getStatus();
-    const config = configService.getConfig();
-    const processedLinks = loadProcessedLinks();
-    
     res.json({
       success: true,
-      isRunning: status.isRunning,
-      isPaused: status.isPaused,
-      pauseReason: status.pauseReason,
-      processedLinksCount: processedLinks.size,
-      targetAccounts: config.targetAccounts || [],
-      nextCycleTime: status.nextCycleTime,
-      cycleDelay: status.cycleDelay
+      ...status
     });
   } catch (error) {
     console.error('Error getting scraping status:', error);
-    logService.error(`Error getting scraping status: ${error.message}`, 'system');
-    
     res.status(500).json({
       success: false,
-      error: error.message || 'Failed to get scraping status'
+      message: `Error getting scraper status: ${error.message}`
     });
   }
 });
@@ -133,13 +121,13 @@ router.post('/clear-processed', (req, res) => {
  */
 router.get('/processed', (req, res) => {
   try {
-    const processedLinks = loadProcessedLinks(true);
+    const processedLinks = scrapingService.getProcessedLinks();
     
-    logService.info(`Retrieved ${processedLinks.size} processed links`, 'system');
+    logService.info(`Retrieved ${processedLinks.length} processed links`, 'system');
     
     res.json({
       success: true,
-      links: Array.from(processedLinks)
+      links: processedLinks
     });
   } catch (error) {
     console.error('Error retrieving processed links:', error);
@@ -149,23 +137,6 @@ router.get('/processed', (req, res) => {
       success: false,
       error: error.message || 'Failed to retrieve processed links'
     });
-  }
-});
-
-/**
- * @route GET /api/scrape/processed-links-file
- * @desc Get the raw processed links file for viewing
- * @access Public
- */
-router.get('/processed-links-file', (req, res) => {
-  try {
-    const filePath = path.join(__dirname, '../../../processed_links.txt');
-    res.setHeader('Content-Type', 'text/plain');
-    res.setHeader('Content-Disposition', 'inline; filename="processed_links.txt"');
-    res.sendFile(filePath);
-  } catch (error) {
-    console.error('Error serving processed links file:', error);
-    res.status(500).send('Error serving file: ' + error.message);
   }
 });
 

@@ -5,6 +5,16 @@ Automatically collect tweets on your target accounts, process them with AI, and 
 
 ![Dashboard](screenshots/dashboard.png)
 
+## Features
+
+- **Automated Tweet Collection**: Scrapes tweets from your selected target accounts
+- **AI-Powered Processing**: Uses OpenAI GPT models to extract and rephrase relevant content
+- **Smart Scheduling**: 30-minute interval between scraping cycles with visual countdown timer
+- **Failed Batch Recovery**: Tracks processing failures and allows one-click retries
+- **OpenAI Integration**: Configure model selection, token limits, and custom prompts
+- **Real-Time Dashboard**: Monitor status, logs, and processing statistics
+- **Target Account Management**: Easy addition and CSV import of accounts to monitor
+
 ## What You Need
 - A Twitter account
 - An OpenAI API key (get one at [platform.openai.com](https://platform.openai.com/))

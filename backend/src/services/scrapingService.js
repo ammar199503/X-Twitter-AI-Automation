@@ -4,7 +4,7 @@ import * as twitterService from './twitterService.js';
 import * as configService from './configService.js';
 import * as logService from './logService.js';
 import * as openaiService from './openaiService.js';
-import { loadProcessedLinks, saveProcessedLink } from '../utils/fileUtils.js';
+import { loadProcessedLinks, saveProcessedLink, clearProcessedLinks as fileUtilsClearProcessedLinks } from '../utils/fileUtils.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -21,6 +21,11 @@ let scrapingInterval = null;
 let processedLinks = new Set();
 let isPaused = false; // Add a flag to track if scraping is paused for auth
 let pauseReason = ''; // Track the reason for pausing
+let nextCycleTime = null; // Track when the next cycle will run
+
+// Add new variables to store failed tweets
+let failedTweetBatches = [];
+let lastErrorMessage = '';
 
 /**
  * Clean tweet URL to a standard format
@@ -148,14 +153,8 @@ export const startScraping = async () => {
   
   // Function to perform one scraping cycle
   const performScrapingCycle = async () => {
-    if (!isRunning) {
-      logService.info("Scraping cycle skipped because scraper is stopped", 'scraper');
-      return;
-    }
-    
-    // Skip this cycle if we're paused for authentication
     if (isPaused) {
-      logService.warn(`Scraping is paused: ${pauseReason}`, 'scraper');
+      logService.info(`Scraping is paused: ${pauseReason}`, 'scraper');
       return;
     }
     
@@ -192,77 +191,8 @@ export const startScraping = async () => {
       
       logService.info(`Processing batch of ${unprocessedTweets.length} unprocessed tweets`, 'scraper');
       
-      try {
-        // Process tweets in batch to find all relevant crypto news
-        const rephrasedTweets = await openaiService.processTweetBatch(unprocessedTweets);
-        
-        // Add another check after OpenAI processing
-        if (!isRunning) {
-          logService.info("Scraping was stopped during processing, aborting tweet posting", 'scraper');
-          return;
-        }
-        
-        // Track which tweets we should consider processed
-        const tweetsToProcess = new Set();
-        
-        if (rephrasedTweets && rephrasedTweets.length > 0) {
-          logService.info(`Found ${rephrasedTweets.length} relevant crypto news tweets`, 'scraper');
-          
-          // Post each rephrased tweet with configured delays
-          let successfulPostCount = 0;
-          for (const tweet of rephrasedTweets) {
-            if (!isRunning) break;
-            if (isPaused) break; // Don't proceed if we've been paused
-            
-            try {
-              await twitterService.sendTweet(tweet);
-              logService.info(`Posted crypto news tweet successfully: ${tweet.substring(0, 50)}...`, 'scraper');
-              successfulPostCount++;
-              
-              // Add delay between tweets
-              if (isRunning && !isPaused && rephrasedTweets.indexOf(tweet) < rephrasedTweets.length - 1) {
-                const { minDelay, maxDelay } = config.delays;
-                const delay = Math.floor(Math.random() * (maxDelay - minDelay + 1)) + minDelay;
-                logService.info(`Waiting ${delay/1000} seconds before next tweet...`, 'scraper');
-                await new Promise(resolve => setTimeout(resolve, delay));
-              }
-            } catch (tweetError) {
-              // Check if this is an authentication error
-              if (tweetError.message && tweetError.message.includes("Authentication failed")) {
-                logService.error("Twitter authentication issue detected, pausing scraping", 'scraper');
-                pauseScraping("Authentication required. Please re-login to Twitter.");
-                // Don't mark tweets as processed - we'll retry after reauth
-                return;
-              } else {
-                logService.error(`Error posting tweet: ${tweetError.message}`, 'scraper');
-                // Don't mark any tweets as processed when a tweet posting fails
-                // We don't know which original tweet corresponds to this rephrased tweet
-                return; // Exit the function without marking any tweets as processed
-              }
-            }
-          }
-          
-          // Only mark tweets as processed if ALL tweets were successfully posted
-          if (successfulPostCount === rephrasedTweets.length) {
-            // Since all tweets were posted successfully, we can mark all the original tweets as processed
-            for (const tweet of unprocessedTweets) {
-              saveProcessedLink(tweet.url);
-              processedLinks.add(tweet.url);
-            }
-          }
-        } else {
-          logService.info("No relevant crypto news found in these tweets", 'scraper');
-          
-          // If no tweets were selected for posting, we can safely mark them all as processed
-          for (const tweet of unprocessedTweets) {
-            saveProcessedLink(tweet.url);
-            processedLinks.add(tweet.url);
-          }
-        }
-      } catch (batchError) {
-        logService.error(`Error processing tweet batch: ${batchError.message}`, 'scraper');
-        // Do not mark tweets as processed if there was an error in batch processing
-      }
+      // Use the new processTwitterBatch function
+      await processTwitterBatch(unprocessedTweets);
       
       logService.info("Scraping cycle completed", 'scraper');
     } catch (error) {
@@ -274,8 +204,14 @@ export const startScraping = async () => {
   await performScrapingCycle();
   
   // Schedule periodic scraping
-  const cycleDelay = Math.max(60000, config.delays.maxDelay); // At least 1 minute between cycles
-  scrapingInterval = setInterval(performScrapingCycle, cycleDelay);
+  const cycleDelay = 1800000; // 30 minutes in milliseconds
+  nextCycleTime = Date.now() + cycleDelay;
+  logService.info(`Sleeping for 30 minutes before starting the next scraping cycle (at ${new Date(nextCycleTime).toLocaleTimeString()})`, 'scraper');
+  scrapingInterval = setInterval(() => {
+    performScrapingCycle();
+    // Update next cycle time after starting a new cycle
+    nextCycleTime = Date.now() + cycleDelay;
+  }, cycleDelay);
   
   return true;
 };
@@ -375,6 +311,176 @@ export const getStatus = () => {
     isRunning,
     isPaused,
     pauseReason,
-    processedCount: processedLinks.size
+    processedCount: processedLinks.size,
+    nextCycleTime: isRunning && !isPaused && nextCycleTime ? nextCycleTime : null,
+    cycleDelay: 1800000 // 30 minutes in milliseconds
   };
+};
+
+// Add this new function to get the failed batch info
+export const getFailedBatchInfo = () => {
+  return {
+    hasFailed: failedTweetBatches.length > 0,
+    failedBatchCount: failedTweetBatches.length,
+    totalTweets: failedTweetBatches.reduce((count, batch) => count + batch.length, 0),
+    lastErrorMessage: lastErrorMessage
+  };
+};
+
+// Add this new function to retry processing failed tweets
+export const retryFailedBatch = async () => {
+  if (failedTweetBatches.length === 0) {
+    return {
+      success: false,
+      message: "No failed batches to retry"
+    };
+  }
+  
+  if (isPaused) {
+    return {
+      success: false,
+      message: "Scraper is paused. Resume scraping before retrying."
+    };
+  }
+  
+  if (!isRunning) {
+    return {
+      success: false,
+      message: "Scraper is not running. Start scraping before retrying."
+    };
+  }
+
+  try {
+    // Take the oldest failed batch
+    const batchToRetry = failedTweetBatches.shift();
+    
+    logService.info(`Retrying batch of ${batchToRetry.length} previously failed tweets`, 'scraper');
+    
+    // Process the batch like in the main cycle, but with special retry handling
+    await processTwitterBatch(batchToRetry, true);
+    
+    return {
+      success: true,
+      message: "Successfully retried processing the failed batch."
+    };
+  } catch (error) {
+    logService.error(`Error retrying failed batch: ${error.message}`, 'scraper');
+    return {
+      success: false,
+      message: `Failed to retry: ${error.message}`
+    };
+  }
+};
+
+// Add this new utility function to process a batch of tweets
+// This extracts the core processing logic from performScrapingCycle
+const processTwitterBatch = async (unprocessedTweets, isRetry = false) => {
+  try {
+    // Get config for delays between tweets
+    const config = configService.getConfig();
+    
+    // Process tweets in batch to find all relevant crypto news
+    const rephrasedTweets = await openaiService.processTweetBatch(unprocessedTweets);
+    
+    // Add another check after OpenAI processing
+    if (!isRunning) {
+      logService.info("Scraping was stopped during processing, aborting tweet posting", 'scraper');
+      return false;
+    }
+    
+    // Track which tweets we should consider processed
+    const tweetsToProcess = new Set();
+    
+    if (rephrasedTweets && rephrasedTweets.length > 0) {
+      logService.info(`Found ${rephrasedTweets.length} relevant crypto news tweets`, 'scraper');
+      
+      // Post each rephrased tweet with configured delays
+      let successfulPostCount = 0;
+      for (const tweet of rephrasedTweets) {
+        if (!isRunning) break;
+        if (isPaused) break; // Don't proceed if we've been paused
+        
+        try {
+          await twitterService.sendTweet(tweet);
+          logService.info(`Posted crypto news tweet successfully: ${tweet.substring(0, 50)}...`, 'scraper');
+          successfulPostCount++;
+          
+          // Add delay between tweets
+          if (isRunning && !isPaused && rephrasedTweets.indexOf(tweet) < rephrasedTweets.length - 1) {
+            const { minDelay, maxDelay } = config.delays;
+            const delay = Math.floor(Math.random() * (maxDelay - minDelay + 1)) + minDelay;
+            logService.info(`Waiting ${delay/1000} seconds before next tweet...`, 'scraper');
+            await new Promise(resolve => setTimeout(resolve, delay));
+          }
+        } catch (tweetError) {
+          // Check if this is an authentication error
+          if (tweetError.message && tweetError.message.includes("Authentication failed")) {
+            logService.error("Twitter authentication issue detected, pausing scraping", 'scraper');
+            pauseScraping("Authentication required. Please re-login to Twitter.");
+            // Don't mark tweets as processed - we'll retry after reauth
+            if (isRetry) {
+              // Put the batch back at the front of the queue if this was a retry
+              failedTweetBatches.unshift(unprocessedTweets);
+            }
+            return false;
+          } else {
+            logService.error(`Error posting tweet: ${tweetError.message}`, 'scraper');
+            // Don't mark any tweets as processed when a tweet posting fails
+            // We don't know which original tweet corresponds to this rephrased tweet
+            if (isRetry) {
+              // Put the batch back at the front of the queue if this was a retry
+              failedTweetBatches.unshift(unprocessedTweets);
+            }
+            return false;
+          }
+        }
+      }
+      
+      // Only mark tweets as processed if ALL tweets were successfully posted
+      if (successfulPostCount === rephrasedTweets.length) {
+        // Since all tweets were posted successfully, we can mark all the original tweets as processed
+        for (const tweet of unprocessedTweets) {
+          saveProcessedLink(tweet.url);
+          processedLinks.add(tweet.url);
+        }
+        return true;
+      }
+    } else {
+      logService.info("No relevant crypto news found in these tweets", 'scraper');
+      
+      // If no tweets were selected for posting, we can safely mark them all as processed
+      for (const tweet of unprocessedTweets) {
+        saveProcessedLink(tweet.url);
+        processedLinks.add(tweet.url);
+      }
+      return true;
+    }
+    
+    return false;
+  } catch (error) {
+    logService.error(`Error processing tweet batch: ${error.message}`, 'scraper');
+    
+    // Store the error message for the dashboard
+    lastErrorMessage = error.message;
+    
+    // Store the failed batch for retry if this isn't already a retry
+    if (!isRetry) {
+      failedTweetBatches.push(unprocessedTweets);
+      logService.info(`Stored failed batch of ${unprocessedTweets.length} tweets for later retry`, 'scraper');
+    }
+    
+    return false;
+  }
+};
+
+// Get processed links
+export const getProcessedLinks = () => {
+  return Array.from(processedLinks);
+};
+
+// Clear processed links - now using fileUtils implementation
+export const clearProcessedLinks = () => {
+  processedLinks.clear();
+  fileUtilsClearProcessedLinks();
+  return true;
 }; 

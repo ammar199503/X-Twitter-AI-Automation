@@ -57,6 +57,7 @@ import {
   Dashboard as DashboardIcon,
   ReportProblem as ReportProblemIcon,
   HourglassTop as HourglassTopIcon,
+  AccessTime as AccessTimeIcon,
 } from '@mui/icons-material';
 import ApiService from '../services/api';
 
@@ -89,10 +90,27 @@ const Dashboard = () => {
   // Add a new state for stop confirmation
   const [confirmStopOpen, setConfirmStopOpen] = useState(false);
 
+  // Add new state for failed batch information
+  const [failedBatchInfo, setFailedBatchInfo] = useState({
+    hasFailed: false,
+    failedBatchCount: 0,
+    totalTweets: 0,
+    lastErrorMessage: ''
+  });
+  const [isLoadingFailedBatchInfo, setIsLoadingFailedBatchInfo] = useState(false);
+  const [isRetrying, setIsRetrying] = useState(false);
+
+  // Add countdown timer state
+  const [countdown, setCountdown] = useState(null);
+
   // Define functions with useCallback to prevent dependency issues
   const checkAuth = useCallback(async () => {
     try {
+      console.log('Dashboard: Checking authentication status...');
       const { data: authData } = await ApiService.auth.getStatus();
+      
+      // Add debug logging
+      console.log('Dashboard: Auth check response:', authData);
       
       // Don't redirect if not logged in, we'll show the login button instead
       if (authData) {
@@ -101,7 +119,10 @@ const Dashboard = () => {
 
       // Still check if target accounts are set up for logged in users
       if (authData && authData.isLoggedIn) {
+        console.log('Dashboard: User is logged in, checking app status...');
         const { data: statusData } = await ApiService.getAppStatus();
+        console.log('Dashboard: App status response:', statusData);
+        
         if (statusData.success) {
           const { targetAccounts } = statusData.status;
           
@@ -112,59 +133,76 @@ const Dashboard = () => {
             return false;
           }
         }
+      } else {
+        // User is not logged in but we'll still show the dashboard with login button
+        console.log('Dashboard: User is not logged in, but will show dashboard with login option');
       }
       
+      // Return true in all cases - we'll show appropriate UI based on auth state
       return true;
     } catch (error) {
-      console.error('Auth check error:', error);
-      // Only redirect on error - API is unreachable
-      navigate('/login');
-      return false;
+      console.error('Dashboard: Auth check error:', error);
+      // Only redirect on critical errors - API is unreachable
+      if (error.message.includes('Network Error') || error.response?.status >= 500) {
+        console.log('Dashboard: Critical API error, redirecting to login');
+        navigate('/login');
+        return false;
+      }
+      
+      // For other errors, still show dashboard with error state
+      console.log('Dashboard: Non-critical error, showing dashboard with error state');
+      return true;
     }
   }, [navigate]);
 
   const fetchStatus = useCallback(async () => {
+    setIsLoading(true);
+    setError('');
     try {
-      setIsLoading(true);
-      const { data } = await ApiService.getAppStatus();
-      if (data.success) {
-        // Normalize the delays property names to ensure consistent access
-        if (data.status.delays) {
-          data.status.delays = {
-            min: data.status.delays.min || data.status.delays.minDelay,
-            max: data.status.delays.max || data.status.delays.maxDelay,
-            minDelay: data.status.delays.minDelay || data.status.delays.min,
-            maxDelay: data.status.delays.maxDelay || data.status.delays.max
-          };
-        }
-        
-        // Check if OpenAI is configured
-        const checkOpenAIStatus = async () => {
-          try {
-            const response = await ApiService.config.getOpenAIConfig();
-            return {
-              ...data.status,
-              openAIConfigured: !!(response.data?.openai?.apiKey)
-            };
-          } catch (error) {
-            console.error('Error checking OpenAI status:', error);
-            return {
-              ...data.status,
-              openAIConfigured: false
-            };
-          }
+      const response = await ApiService.getAppStatus();
+      console.log('Dashboard: fetchStatus response:', response);
+      
+      // Validate response structure
+      if (!response) {
+        throw new Error('Empty response from server');
+      }
+      
+      if (response.success) {
+        // Ensure we have a status object even if empty
+        const statusData = response.status || {
+          isRunning: false,
+          isLoggedIn: false,
+          openAIConfigured: false
         };
         
-        // Get enhanced status with OpenAI config check
-        const enhancedStatus = await checkOpenAIStatus();
-        console.log('Enhanced status data:', enhancedStatus);
-        setStatus(enhancedStatus);
+        setStatus(statusData);
+        
+        // Also fetch failed batch info if the scraper is running
+        if (statusData.isRunning) {
+          // Use direct API call instead of calling fetchFailedBatchInfo to avoid circular dependency
+          try {
+            const failedBatchResponse = await ApiService.scraper.getFailedBatchInfo();
+            if (failedBatchResponse && failedBatchResponse.data) {
+              setFailedBatchInfo(failedBatchResponse.data);
+            }
+          } catch (batchError) {
+            console.error('Error fetching failed batch info:', batchError);
+            // Don't set error - we still want to show status
+          }
+        }
       } else {
-        setError('Failed to load status');
+        setError(response.error || 'Failed to load status');
       }
     } catch (error) {
-      console.error('Status fetch error:', error);
-      setError('Failed to connect to the server');
+      console.error('Error fetching status:', error);
+      setError('Failed to load status: ' + error.message);
+      
+      // Set minimal status to prevent UI errors
+      setStatus({
+        isRunning: false,
+        isLoggedIn: false,
+        openAIConfigured: false
+      });
     } finally {
       setIsLoading(false);
     }
@@ -208,25 +246,165 @@ const Dashboard = () => {
     }
   }, []);
 
+  // Add a function to fetch failed batch information
+  const fetchFailedBatchInfo = useCallback(async () => {
+    if (!status?.isRunning) return; // Only fetch if the scraper is running
+    
+    setIsLoadingFailedBatchInfo(true);
+    try {
+      const { data } = await ApiService.scraper.getFailedBatchInfo();
+      setFailedBatchInfo(data);
+    } catch (error) {
+      console.error('Error fetching failed batch info:', error);
+      setError('Failed to fetch batch information: ' + error.message);
+    } finally {
+      setIsLoadingFailedBatchInfo(false);
+    }
+  }, [status?.isRunning]);
+
+  // Add a function to retry failed batches
+  const handleRetryFailedBatch = async () => {
+    setIsRetrying(true);
+    try {
+      const { data } = await ApiService.scraper.retryFailedBatch();
+      if (data.success) {
+        setInfo(data.message || 'Successfully started retrying the failed batch.');
+        // Refetch the failed batch info after a short delay
+        setTimeout(() => {
+          fetchFailedBatchInfo();
+        }, 1000);
+      } else {
+        setError(data.message || 'Failed to retry batch processing.');
+      }
+    } catch (error) {
+      console.error('Error retrying failed batch:', error);
+      setError('Failed to retry batch: ' + error.message);
+    } finally {
+      setIsRetrying(false);
+    }
+  };
+
+  // Add function to format time remaining
+  const formatTimeRemaining = (milliseconds) => {
+    if (!milliseconds) return "N/A";
+    
+    const totalSeconds = Math.floor(milliseconds / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    
+    return `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
+  };
+  
+  // Convert milliseconds to a more human-readable format with minutes only
+  const formatTimeRemainingReadable = (milliseconds) => {
+    if (!milliseconds) return "N/A";
+    
+    const totalSeconds = Math.floor(milliseconds / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    
+    if (minutes > 0) {
+      return `${minutes} min ${seconds} sec`;
+    } else {
+      return `${seconds} seconds`;
+    }
+  };
+
+  // Add effect to update countdown timer
+  useEffect(() => {
+    let interval = null;
+    
+    if (status?.isRunning && !status?.isPaused && status?.nextCycleTime) {
+      interval = setInterval(() => {
+        const now = Date.now();
+        const timeLeft = Math.max(0, status.nextCycleTime - now);
+        
+        setCountdown(timeLeft);
+        
+        // If timeLeft is 0, the next cycle should have started
+        if (timeLeft === 0) {
+          clearInterval(interval);
+          // Fetch status to get updated nextCycleTime
+          fetchStatus();
+        }
+      }, 1000);
+    } else {
+      setCountdown(null);
+    }
+    
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [status?.isRunning, status?.isPaused, status?.nextCycleTime]);
+
   useEffect(() => {
     // Only set up status polling if auth check passes
     const initDashboard = async () => {
-      const authOk = await checkAuth();
-      if (authOk) {
-        // Initial fetch
-        fetchStatus();
-        fetchLogs();
-        fetchProcessedLinks(); // Fetch processed links on initial load
+      console.log('Dashboard: Initializing dashboard...');
+      try {
+        // Show loading state
+        setIsLoading(true);
         
-        // Poll for status updates
-        const intervalId = setInterval(fetchStatus, 10000);
-        const logsIntervalId = setInterval(fetchLogs, 15000);
+        try {
+          const authOk = await checkAuth();
+          console.log('Dashboard: Auth check result:', authOk);
+        } catch (authError) {
+          console.error('Dashboard: Auth check error:', authError);
+          // Continue with initialization even if auth check fails
+        }
+        
+        // Always fetch status and logs, even if auth check fails
+        try {
+          await fetchStatus();
+          console.log('Dashboard: Status loaded successfully');
+        } catch (statusError) {
+          console.error('Dashboard: Error fetching initial status:', statusError);
+          setError('Failed to load application status. Please refresh the page or try again later.');
+        }
+        
+        try {
+          await fetchLogs();
+          console.log('Dashboard: Logs loaded successfully');
+        } catch (logsError) {
+          console.error('Dashboard: Error fetching logs:', logsError);
+          // Non-critical error, don't show to user
+        }
+        
+        try {
+          await fetchProcessedLinks();
+          console.log('Dashboard: Processed links loaded successfully');
+        } catch (linksError) {
+          console.error('Dashboard: Error fetching processed links:', linksError);
+          // Non-critical error, don't show to user
+        }
+        
+        // Set up polling intervals with built-in error handling
+        const intervalId = setInterval(() => {
+          fetchStatus().catch(err => {
+            console.error('Dashboard: Error in status polling:', err);
+            // Don't update error state for polling failures to avoid constant error messages
+          });
+        }, 10000);
+        
+        const logsIntervalId = setInterval(() => {
+          fetchLogs().catch(err => {
+            console.error('Dashboard: Error in logs polling:', err);
+          });
+        }, 15000);
+        
+        // Mark loading as complete
+        setIsLoading(false);
         
         // Cleanup on unmount
         return () => {
+          console.log('Dashboard: Cleaning up intervals...');
           clearInterval(intervalId);
           clearInterval(logsIntervalId);
         };
+      } catch (error) {
+        console.error('Dashboard: Critical error in initialization:', error);
+        setIsLoading(false);
+        setError('Failed to initialize dashboard. Please try refreshing the page.');
       }
     };
     
@@ -646,6 +824,36 @@ const Dashboard = () => {
                       </Box>
                     </Box>
                     
+                    {/* Add Next Cycle Countdown */}
+                    {status?.isRunning && !status?.isPaused && countdown !== null && (
+                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                        <Typography variant="body1" component="span" sx={{ mr: 1, color: 'text.secondary' }}>
+                          Next Cycle:
+                        </Typography>
+                        <Box 
+                          sx={{ 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            py: 0.5, 
+                            px: 1.5, 
+                            borderRadius: 3,
+                            backgroundColor: 'rgba(90, 200, 250, 0.12)',
+                            color: 'info.main',
+                            fontWeight: 500
+                          }}
+                        >
+                          <AccessTimeIcon fontSize="small" sx={{ mr: 0.5 }} />
+                          <Typography 
+                            variant="body2" 
+                            component="span" 
+                            sx={{ fontWeight: 600 }}
+                          >
+                            {formatTimeRemainingReadable(countdown)}
+                          </Typography>
+                        </Box>
+                      </Box>
+                    )}
+                    
                     <Box sx={{ display: 'flex', alignItems: 'center' }}>
                       <Typography variant="body1" component="span" sx={{ mr: 1, color: 'text.secondary' }}>
                         Logged in as:
@@ -698,16 +906,71 @@ const Dashboard = () => {
                       </IconButton>
                       <Tooltip title="Delete processed tweets history">
                         <IconButton
-                          color="error"
                           size="small"
+                          color="error"
                           onClick={handleOpenClearWarningDialog}
-                          disabled={isLoadingLinks || processedLinks.length === 0}
+                          disabled={isClearing || !processedLinks.length}
                           sx={{ ml: 1 }}
                         >
-                          <DeleteSweepIcon fontSize="small" />
+                          {isClearing ? <CircularProgress size={16} /> : <DeleteSweepIcon fontSize="small" />}
                         </IconButton>
                       </Tooltip>
                     </Box>
+                    
+                    {/* Add Failed Batch Information */}
+                    {status?.isRunning && failedBatchInfo.hasFailed && (
+                      <Box sx={{ mt: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
+                        <Alert 
+                          severity="warning" 
+                          sx={{ 
+                            borderRadius: 2,
+                            backgroundColor: 'rgba(255, 152, 0, 0.1)',
+                            '& .MuiAlert-icon': {
+                              color: 'warning.main'
+                            }
+                          }}
+                        >
+                          <AlertTitle>Processing Failure Detected</AlertTitle>
+                          <Typography variant="body2" sx={{ mb: 1 }}>
+                            {failedBatchInfo.totalTweets} tweets in {failedBatchInfo.failedBatchCount} {failedBatchInfo.failedBatchCount === 1 ? 'batch' : 'batches'} failed to process.
+                          </Typography>
+                          <Typography variant="body2" sx={{ mb: 1 }}>
+                            <strong>Error:</strong> {failedBatchInfo.lastErrorMessage}
+                          </Typography>
+                          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
+                            <Button 
+                              variant="contained" 
+                              color="warning" 
+                              size="small" 
+                              startIcon={isRetrying ? <CircularProgress size={16} color="inherit" /> : <RefreshIcon />}
+                              onClick={handleRetryFailedBatch}
+                              disabled={isRetrying || !failedBatchInfo.hasFailed}
+                              sx={{ 
+                                borderRadius: 2,
+                                textTransform: 'none',
+                                boxShadow: '0 2px 8px rgba(255, 152, 0, 0.2)'
+                              }}
+                            >
+                              Retry Processing
+                            </Button>
+                            <Button 
+                              variant="outlined" 
+                              color="inherit" 
+                              size="small" 
+                              onClick={fetchFailedBatchInfo}
+                              disabled={isLoadingFailedBatchInfo}
+                              sx={{ 
+                                ml: 1,
+                                borderRadius: 2,
+                                textTransform: 'none',
+                              }}
+                            >
+                              Refresh
+                            </Button>
+                          </Box>
+                        </Alert>
+                      </Box>
+                    )}
                   </Stack>
                 </Grid>
                 

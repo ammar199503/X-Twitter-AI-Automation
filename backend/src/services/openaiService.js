@@ -6,19 +6,20 @@ let openai = null;
 
 // Default configurations
 const DEFAULT_CONFIG = {
-  model: "gpt-3.5-turbo",
-  temperature: 0.7,
-  maxTokens: 1000,
+  model: "gpt-4o-mini",
+  temperature: 0.6,
+  maxTokens: 4096,
   systemPrompt: `You are a skilled social media manager for a cryptocurrency news channel. Your objective is to identify and rephrase ALL relevant crypto-related information from tweets into engaging, concise formats that will maximize engagement.
 
 GUIDELINES:
 - Focus ONLY on cryptocurrency, blockchain, Web3, or major financial news that impacts crypto markets
-- Ignore irrelevant content like giveaways, personal opinions, or non-news items
+- Add one or two non-crypto news from people like Elon Musk, Bill Gates, Donald Trump, etc, but make sure that the tweet genrerated is understandable by the average person.
+- Ignore irrelevant content like giveaways, personal opinions
 - Format each piece of content as a separate news announcement, not as a retweet
 - Maintain factual accuracy while being concise
 - Match the tone of a professional news organization
 - Keep each response under 280 characters (Twitter limit)
-- Do not create more than 10 tweets.
+- Do not create more than 15 tweets.
 - If many users are reporting the same thing, do not create multiple tweets for same news.
 - Add relevant hashtags like #Crypto #Bitcoin where appropriate, but limit to 2-3 hashtags maximum per tweet
 - Return ALL relevant news items, not just the most important one
@@ -26,13 +27,13 @@ GUIDELINES:
 - You can tweet above Example as news like this: "DrProfitCrypto says he prdicted the crash from $90,000 and now predicts $74,000 for Bitcoin, Do you guys agree? -Yes -No #Crypto #Bitcoin #BitcoinNews"
 - Always use relevent Crypto token tickers instead of full names. Example: $BTC for Bitcoin, $ETH for Ethereum, $BNB for Binance Coin, $USDT for Tether, $XRP for XRP, $SOL for Solana, $DOGE for Dogecoin, $LTC for Litecoin, $DOT for Polkadot, $MATIC for Polygon.
 - Examine all tweets to see if overall influencer feeling are bullish or bearish and generate one tweet from your own intelligence and reasoning. Example: If you see bearish content more generate a tweet like "Overall my twitter/X feed seems bearish. Do you guys agree with this? Comment YES or NO." If you see bullish content more generate a tweet like "Overall my twitter/X feed seems bullish. Do you guys agree with this? Comment YES or NO." If you see sideways content more generate a tweet like "Overall my twitter/X feed seems to say market is sideways. Do you guys agree with this? Comment YES or NO."
-- If no tweets contain relevant crypto news, respond with "No relevant crypto news found in these tweets."
+- If no tweets contain relevant crypto news or something interesting, respond with "No relevant crypto news found in these tweets."
 - Format multiple tweets with "---" between them`,
   userPromptTemplate: `As a crypto news social media manager, review these tweets from influencers and identify ALL relevant crypto news items. Rephrase each one as a concise, engaging news tweet:
 
 {tweets}
 
-Remember: Select ALL relevant crypto/financial news, ignore giveaways or non-news content, keep each tweet under 280 characters, and only include attribution when posting someone's personal acheivements or claims.`
+Remember: Select ALL relevant crypto/financial news and interesting content, ignore giveaways or non-news content, keep each tweet under 280 characters, and only include attribution when posting someone's personal acheivements or claims.`
 };
 
 // Export DEFAULT_CONFIG so it can be used by other modules
@@ -68,12 +69,41 @@ export const initialize = async () => {
  */
 const getOpenAIConfig = () => {
   const config = configService.getConfig();
+  
+  // Get configuration values with fallbacks to defaults
+  const model = config.openai?.model || DEFAULT_CONFIG.model;
+  const temperature = config.openai?.temperature || DEFAULT_CONFIG.temperature;
+  const systemPrompt = config.openai?.systemPrompt || DEFAULT_CONFIG.systemPrompt;
+  const userPromptTemplate = config.openai?.userPromptTemplate || DEFAULT_CONFIG.userPromptTemplate;
+  
+  // Ensure maxTokens is within model limits
+  let maxTokens = config.openai?.maxTokens || DEFAULT_CONFIG.maxTokens;
+  
+  // Enforce maximum token limits based on model
+  const MODEL_TOKEN_LIMITS = {
+    'gpt-4': 8192,
+    'gpt-4o': 16384,
+    'gpt-4o-mini': 16384
+  };
+  
+  // Default to 4000 if we don't know the model's limit
+  const modelLimit = MODEL_TOKEN_LIMITS[model] || 4000;
+  
+  // Cap at 50% of the model's limit to leave room for input tokens
+  // This allows more output tokens while still ensuring there's room for inputs
+  const safeMaxTokens = Math.min(maxTokens, Math.floor(modelLimit * 0.5));
+  
+  // If we capped the tokens, log this for transparency
+  if (safeMaxTokens < maxTokens) {
+    logService.info(`User requested ${maxTokens} tokens, but capped at ${safeMaxTokens} tokens (50% of ${model}'s ${modelLimit} token limit) to leave room for input`, 'openai');
+  }
+  
   return {
-    model: config.openai?.model || DEFAULT_CONFIG.model,
-    temperature: config.openai?.temperature || DEFAULT_CONFIG.temperature,
-    maxTokens: config.openai?.maxTokens || DEFAULT_CONFIG.maxTokens,
-    systemPrompt: config.openai?.systemPrompt || DEFAULT_CONFIG.systemPrompt,
-    userPromptTemplate: config.openai?.userPromptTemplate || DEFAULT_CONFIG.userPromptTemplate
+    model,
+    temperature,
+    maxTokens: safeMaxTokens,
+    systemPrompt,
+    userPromptTemplate
   };
 };
 
@@ -100,6 +130,7 @@ export const processTweetBatch = async (tweets) => {
     const userPrompt = openaiConfig.userPromptTemplate.replace('{tweets}', tweetTexts);
     
     logService.info(`Processing batch of ${tweets.length} tweets for crypto news relevance`, 'openai');
+    logService.info(`Using model: ${openaiConfig.model}, max tokens: ${openaiConfig.maxTokens}`, 'openai');
     
     const response = await openai.chat.completions.create({
       model: openaiConfig.model,
@@ -115,15 +146,23 @@ export const processTweetBatch = async (tweets) => {
       const rephrased = response.choices[0].message.content.trim();
       
       // Check if OpenAI found any relevant news
-      if (rephrased.includes("No relevant crypto news")) {
+      // Only consider it "no news" if that's the ENTIRE response or the only meaningful part
+      if (rephrased === "No relevant crypto news found in these tweets." || 
+          rephrased === "No relevant crypto news found in these tweets" ||
+          (rephrased.length < 100 && rephrased.includes("No relevant crypto news"))) {
         logService.info('No relevant crypto news found in batch', 'openai');
         return null;
       }
       
       // Split multiple tweets by the separator
       const tweets = rephrased.split('---').map(tweet => tweet.trim()).filter(tweet => tweet);
-      logService.info(`Successfully processed ${tweets.length} relevant tweets`, 'openai');
-      return tweets;
+      
+      // Filter out any tweet that only says "No relevant crypto news" 
+      const filteredTweets = tweets.filter(tweet => 
+        !tweet.match(/^No relevant crypto news found in these tweets\.?$/));
+      
+      logService.info(`Successfully processed ${filteredTweets.length} relevant tweets`, 'openai');
+      return filteredTweets.length > 0 ? filteredTweets : null;
     } else {
       throw new Error('No rephrased content received from OpenAI');
     }
@@ -169,7 +208,10 @@ export const rephraseTweet = async (tweetText, author) => {
       const rephrased = response.choices[0].message.content.trim();
       
       // Check if OpenAI decided this isn't relevant crypto news
-      if (rephrased.includes("No relevant crypto news")) {
+      // Only consider it "no news" if that's the ENTIRE response or the only meaningful part
+      if (rephrased === "No relevant crypto news found in these tweets." || 
+          rephrased === "No relevant crypto news found in these tweets" ||
+          (rephrased.length < 100 && rephrased.includes("No relevant crypto news"))) {
         logService.info(`Tweet not relevant for crypto news: @${author}`, 'openai');
         return null; // Return null to indicate this tweet should be skipped
       }

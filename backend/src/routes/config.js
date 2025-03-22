@@ -400,11 +400,15 @@ router.get('/openai', (req, res) => {
   try {
     const config = configService.getConfig();
     
+    // Determine if the OpenAI API is configured based on whether a key exists
+    const isConfigured = !!config.openai?.apiKey;
+    
     // Send back the OpenAI configuration including default values for any missing fields
     res.json({
       success: true,
+      isConfigured: isConfigured,
       openai: {
-        apiKey: config.openai?.apiKey ? '••••••••' : '', // Mask the API key if it exists
+        apiKey: isConfigured ? '••••••••' : '', // Mask the API key if it exists
         model: config.openai?.model || openaiService.DEFAULT_CONFIG.model,
         temperature: config.openai?.temperature !== undefined ? config.openai.temperature : openaiService.DEFAULT_CONFIG.temperature,
         maxTokens: config.openai?.maxTokens || openaiService.DEFAULT_CONFIG.maxTokens,
@@ -416,6 +420,7 @@ router.get('/openai', (req, res) => {
     console.error('Error getting OpenAI config:', error);
     res.status(500).json({
       success: false,
+      isConfigured: false,
       error: error.message || 'Error getting OpenAI configuration'
     });
   }
@@ -431,19 +436,40 @@ router.put('/openai', async (req, res) => {
     
     // Validate model if provided
     const validModels = [
-      'gpt-3.5-turbo',
-      'gpt-4o-mini',
       'gpt-4',
-      'gpt-4-turbo',
-      'gpt-4-turbo-preview',
       'gpt-4o',
-      'gpt-4o-latest',
-      'gpt-4.5-preview'
+      'gpt-4o-mini'
     ];
     
     if (model && !validModels.includes(model)) {
       console.warn(`Warning: Potentially unsupported model requested: ${model}`);
       // We'll still allow it in case OpenAI adds new models
+    }
+    
+    // Validate maxTokens against model limits
+    if (maxTokens !== undefined) {
+      const MODEL_TOKEN_LIMITS = {
+        'gpt-4': 8192,
+        'gpt-4o': 16384,
+        'gpt-4o-mini': 16384
+      };
+      
+      const selectedModel = model || configService.getConfig().openai?.model || 'gpt-4o-mini';
+      const modelLimit = MODEL_TOKEN_LIMITS[selectedModel] || 4000;
+      
+      if (maxTokens > modelLimit) {
+        return res.status(400).json({
+          success: false,
+          error: `Max tokens value (${maxTokens}) exceeds the limit for the selected model. The maximum allowed for ${selectedModel} is ${modelLimit} tokens.`
+        });
+      }
+      
+      if (maxTokens < 10) {
+        return res.status(400).json({
+          success: false,
+          error: 'Max tokens value must be at least 10.'
+        });
+      }
     }
     
     const updatedConfig = configService.updateOpenAIConfig({
@@ -466,6 +492,7 @@ router.put('/openai', async (req, res) => {
     
     res.json({
       success: true,
+      isConfigured: !!responseConfig.apiKey,
       openai: responseConfig
     });
   } catch (error) {

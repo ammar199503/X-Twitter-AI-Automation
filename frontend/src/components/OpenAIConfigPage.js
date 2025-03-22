@@ -32,46 +32,45 @@ import ApiService from '../services/api';
 
 const modelOptions = [
   {
-    value: 'gpt-3.5-turbo',
-    label: 'GPT-3.5 Turbo',
-    helperText: 'Fastest and most cost-effective',
-  },
-  {
     value: 'gpt-4o-mini',
     label: 'GPT-4o Mini',
-    helperText: 'Balanced performance and cost',
+    helperText: 'Balanced performance and cost (16,384 tokens)',
   },
   {
     value: 'gpt-4',
     label: 'GPT-4',
-    helperText: 'Capable but older version',
-  },
-  {
-    value: 'gpt-4-turbo',
-    label: 'GPT-4 Turbo',
-    helperText: 'Faster than GPT-4 with improved features',
-  },
-  {
-    value: 'gpt-4-turbo-preview',
-    label: 'GPT-4 Turbo Preview',
-    helperText: 'Latest GPT-4 Turbo with newest features',
+    helperText: 'Original GPT-4 model (8,192 tokens)',
   },
   {
     value: 'gpt-4o',
     label: 'GPT-4o',
-    helperText: 'Latest multimodal model with top performance',
-  },
-  {
-    value: 'gpt-4o-latest',
-    label: 'GPT-4o Latest',
-    helperText: 'The most recent version of GPT-4o',
-  },
-  {
-    value: 'gpt-4.5-preview',
-    label: 'GPT-4.5 Preview',
-    helperText: 'Preview of next generation capabilities',
+    helperText: 'Latest multimodal model with top performance (16,384 tokens)',
   },
 ];
+
+// Define token limits for each model
+const MODEL_TOKEN_LIMITS = {
+  'gpt-4': 8192,
+  'gpt-4o': 16384,
+  'gpt-4o-mini': 16384,
+  // Defaults for other models in case they're still in the UI
+  'gpt-3.5-turbo': 4096,
+  'gpt-4-turbo': 16384,
+  'gpt-4-turbo-preview': 16384,
+  'gpt-4o-latest': 16384,
+  'gpt-4.5-preview': 16384
+};
+
+// Helper function to get the token limit for a model
+const getModelTokenLimit = (modelValue) => {
+  return MODEL_TOKEN_LIMITS[modelValue] || 4096; // Default to 4096 if unknown
+};
+
+// Helper function to get the display name for a model
+const getModelName = (modelValue) => {
+  const model = modelOptions.find(option => option.value === modelValue);
+  return model ? model.label : modelValue || 'selected model';
+};
 
 const OpenAIConfigPage = () => {
   const navigate = useNavigate();
@@ -175,8 +174,32 @@ Remember: Select ALL relevant crypto/financial news, ignore giveaways or non-new
     loadConfig();
   }, []);
   
+  // Add effect to adjust maxTokens when model changes
+  useEffect(() => {
+    if (model && maxTokens) {
+      const tokenLimit = getModelTokenLimit(model);
+      // If current maxTokens exceeds the limit for the newly selected model, adjust it
+      if (maxTokens > tokenLimit) {
+        setMaxTokens(tokenLimit);
+      }
+    }
+  }, [model]);
+  
   const handleSave = async () => {
     try {
+      // Validate max tokens before saving
+      if (maxTokens !== null) {
+        const tokenLimit = getModelTokenLimit(model);
+        if (maxTokens > tokenLimit) {
+          setError(`Max tokens (${maxTokens}) exceeds the limit for ${getModelName(model)} (${tokenLimit}). Please correct this value before saving.`);
+          return;
+        }
+        if (maxTokens < 10) {
+          setError('Max tokens must be at least 10. Please correct this value before saving.');
+          return;
+        }
+      }
+      
       setIsSaving(true);
       setError('');
       setSuccess('');
@@ -195,18 +218,13 @@ Remember: Select ALL relevant crypto/financial news, ignore giveaways or non-new
       });
       
       if (response.data && response.data.success) {
-        setSuccess('OpenAI configuration saved successfully!');
+        setSuccess('OpenAI configuration saved successfully! You can now return to the dashboard.');
         
         // If we sent an API key, clear the input field
         if (apiKeyToSend) {
           setApiKey('');
           setOriginalApiKey(response.data.openai.apiKey || '');
         }
-        
-        // Navigate to the dashboard after successful save
-        setTimeout(() => {
-          navigate('/dashboard');
-        }, 1000);
       }
     } catch (error) {
       console.error('Error saving OpenAI config:', error);
@@ -370,9 +388,24 @@ Remember: Select ALL relevant crypto/financial news, ignore giveaways or non-new
             label="Max Tokens"
             variant="outlined"
             value={maxTokens || ''}
-            onChange={(e) => setMaxTokens(Number(e.target.value))}
+            onChange={(e) => {
+              const value = parseInt(e.target.value, 10);
+              // Only update if it's a valid number
+              if (!isNaN(value) || e.target.value === '') {
+                setMaxTokens(e.target.value === '' ? null : value);
+              }
+            }}
             type="number"
-            helperText="Maximum number of tokens for the generated text"
+            inputProps={{ 
+              min: 10,
+              max: getModelTokenLimit(model)
+            }}
+            error={maxTokens && (maxTokens < 10 || maxTokens > getModelTokenLimit(model))}
+            helperText={
+              maxTokens && maxTokens > getModelTokenLimit(model)
+                ? `Value exceeds the limit for ${getModelName(model)}. Maximum is ${getModelTokenLimit(model)}.`
+                : `Maximum tokens for ${getModelName(model)}: ${getModelTokenLimit(model)}`
+            }
           />
         </CardContent>
       </Card>
@@ -535,12 +568,34 @@ Remember: Focus on movies, TV shows, music releases, and celebrity news. Keep ea
           Back to Scraper Settings
         </Button>
         
-        <Box display="flex" alignItems="center">
+        <Box display="flex" alignItems="center" gap={2}>
           {success && (
-            <Alert severity="success" sx={{ mr: 2 }}>
-              {success}
-            </Alert>
+            <>
+              <Alert severity="success" sx={{ mr: 2 }}>
+                {success}
+              </Alert>
+              
+              <Button
+                variant="contained"
+                color="primary"
+                onClick={() => navigate('/dashboard')}
+                sx={{
+                  borderRadius: 2,
+                  py: 1,
+                  px: 2,
+                  fontWeight: 500,
+                  boxShadow: '0 2px 10px rgba(0, 113, 227, 0.2)',
+                  '&:hover': {
+                    boxShadow: '0 4px 15px rgba(0, 113, 227, 0.3)',
+                    transform: 'translateY(-2px)'
+                  }
+                }}
+              >
+                Go to Dashboard
+              </Button>
+            </>
           )}
+          
           <Button
             variant="contained"
             color="primary"
@@ -548,7 +603,7 @@ Remember: Focus on movies, TV shows, music releases, and celebrity news. Keep ea
             onClick={handleSave}
             disabled={isLoading || isSaving}
           >
-            {isSaving ? 'Saving...' : 'Save and Continue to Dashboard'}
+            {isSaving ? 'Saving...' : 'Save Configuration'}
           </Button>
         </Box>
       </Box>
